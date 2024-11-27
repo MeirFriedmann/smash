@@ -9,7 +9,6 @@
 
 class Command
 {
-    // TODO: Add your data members
 protected:
     const char *cmd_line;
     bool is_background;
@@ -37,7 +36,6 @@ public:
 
     // virtual void prepare();
     // virtual void cleanup();
-    //  TODO: Add your extra methods if needed
 };
 
 class BuiltInCommand : public Command
@@ -77,9 +75,9 @@ public:
 class ChangePromptCommand : public BuiltInCommand
 {
 public:
-    ChangePromptCommand(const char *cmd_line);
-    virtual ~ChangePromptCommand() = default;
     ChangePromptCommand(const char *cmd_line, SmallShell &smash);
+    virtual ~ChangePromptCommand() = default;
+    
     void execute() override;
 } ;
 class RedirectionCommand : public Command
@@ -105,7 +103,7 @@ class ChangeDirCommand : public BuiltInCommand
     const char *cmd_line;
 
 public:
-    ChangeDirCommand(const char *cmd_line, string *plastPwd);
+    ChangeDirCommand(const char *cmd_line, SmallShell& smash);
 
     virtual ~ChangeDirCommand() = default;
 
@@ -322,11 +320,12 @@ private:
     pid_t fg_pid;                     // current foreground process id
     std::map<string, string> aliases; // aliases
 
+    SmallShell();
     
+    static SmallShell* instance; 
 
 public:
     Command *CreateCommand(const char *cmd_line);
-    SmallShell();
     SmallShell(SmallShell const &) = delete;     // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
     static SmallShell &getInstance()             // make SmallShell singleton
@@ -360,6 +359,13 @@ public:
     pid_t getFgPid() const
     {
         return fg_pid;
+    }
+    const string& getLastDir() const{
+        return last_dir;
+    }
+    void setLastDir(const string& dir)
+    {
+        last_dir = dir;
     }
 };
 
