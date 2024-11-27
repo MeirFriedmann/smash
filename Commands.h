@@ -3,9 +3,13 @@
 
 #include <vector>
 #include <map>
-
+#include <string>
+using std::string;
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+
+
+
 
 class Command
 {
@@ -37,6 +41,126 @@ public:
     // virtual void prepare();
     // virtual void cleanup();
 };
+
+class JobsList
+{
+public:
+    class JobEntry
+    {
+        // TODO: Add your data members
+        int job_id; // unique id
+        pid_t prcs_id;
+        std::string cmd_line;
+
+    public:
+        JobEntry(int job_id, pid_t pid, const string &cmd);
+        ~JobEntry() = default;
+        pid_t getPid() const
+        {
+            return prcs_id;
+        }
+        string getCmdLine() const
+        {
+            return cmd_line;
+        }
+    };
+
+    // TODO: Add your data members
+private:
+    std::vector<JobEntry> jobs;
+    int max_job_id;
+
+public:
+    JobsList();
+
+    ~JobsList();
+
+    void addJob(Command *cmd, bool isStopped = false);
+
+    void printJobsList();
+
+    void killAllJobs();
+
+    void removeFinishedJobs();
+
+    JobEntry *getJobById(int jobId);
+
+    void removeJobById(int jobId);
+
+    JobEntry *getLastJob(int *lastJobId);
+
+    JobEntry *getLastStoppedJob(int *jobId);
+
+    int getMaxJobId() const
+    {
+        return max_job_id;
+    }
+
+    // TODO: Add extra methods or modify exisitng ones as needed
+};
+
+
+class SmallShell
+{
+private:
+    // TODO: Add your data members
+    string prompt;                    // current shell prompt
+    string current_dir;               // current working directory
+    string last_dir;                  // previous working directory
+    JobsList *jobs;                   // Jobs list
+    pid_t fg_pid;                     // current foreground process id
+    std::map<string, string> aliases; // aliases
+
+    SmallShell();
+    
+    static SmallShell* instance; 
+
+public:
+    Command *CreateCommand(const char *cmd_line);
+    SmallShell(SmallShell const &) = delete;     // disable copy ctor
+    void operator=(SmallShell const &) = delete; // disable = operator
+    static SmallShell &getInstance()             // make SmallShell singleton
+    {
+        static SmallShell instance; // Guaranteed to be destroyed.
+        // Instantiated on first use.
+        return instance;
+    }
+
+    ~SmallShell();
+
+    void executeCommand(const char *cmd_line);
+
+    // TODO: add extra methods as needed
+    const string &getPrompt() const
+    {
+        return prompt;
+    }
+    void setPrompt(const string &p)
+    {
+        prompt = p;
+    }
+    JobsList *getJobsList()
+    {
+        return jobs;
+    }
+    void setFgPid(pid_t pid)
+    {
+        fg_pid = pid;
+    }
+    pid_t getFgPid() const
+    {
+        return fg_pid;
+    }
+    const string& getLastDir() const{
+        return last_dir;
+    }
+    void setLastDir(const string& dir)
+    {
+        last_dir = dir;
+    }
+};
+
+
 
 class BuiltInCommand : public Command
 {
@@ -152,63 +276,6 @@ public:
     void execute() override;
 };
 
-class JobsList
-{
-public:
-    class JobEntry
-    {
-        // TODO: Add your data members
-        int job_id; // unique id
-        pid_t prcs_id;
-        std::string cmd_line;
-
-    public:
-        JobEntry(int job_id, pid_t pid, const string &cmd);
-        ~JobEntry() = default;
-        pid_t getPid() const
-        {
-            return prcs_id;
-        }
-        string getCmdLine() const
-        {
-            return cmd_line;
-        }
-    };
-
-    // TODO: Add your data members
-private:
-    std::vector<JobEntry> jobs;
-    int max_job_id;
-
-public:
-    JobsList();
-
-    ~JobsList();
-
-    void addJob(Command *cmd, bool isStopped = false);
-
-    void printJobsList();
-
-    void killAllJobs();
-
-    void removeFinishedJobs();
-
-    JobEntry *getJobById(int jobId);
-
-    void removeJobById(int jobId);
-
-    JobEntry *getLastJob(int *lastJobId);
-
-    JobEntry *getLastStoppedJob(int *jobId);
-
-    int getMaxJobId() const
-    {
-        return max_job_id;
-    }
-
-    // TODO: Add extra methods or modify exisitng ones as needed
-};
-
 class JobsCommand : public BuiltInCommand
 {
     // TODO: Add your data members
@@ -309,64 +376,6 @@ public:
     void execute() override;
 };
 
-class SmallShell
-{
-private:
-    // TODO: Add your data members
-    string prompt;                    // current shell prompt
-    string current_dir;               // current working directory
-    string last_dir;                  // previous working directory
-    JobsList *jobs;                   // Jobs list
-    pid_t fg_pid;                     // current foreground process id
-    std::map<string, string> aliases; // aliases
 
-    SmallShell();
-    
-    static SmallShell* instance; 
-
-public:
-    Command *CreateCommand(const char *cmd_line);
-    SmallShell(SmallShell const &) = delete;     // disable copy ctor
-    void operator=(SmallShell const &) = delete; // disable = operator
-    static SmallShell &getInstance()             // make SmallShell singleton
-    {
-        static SmallShell instance; // Guaranteed to be destroyed.
-        // Instantiated on first use.
-        return instance;
-    }
-
-    ~SmallShell();
-
-    void executeCommand(const char *cmd_line);
-
-    // TODO: add extra methods as needed
-    const string &getPrompt() const
-    {
-        return prompt;
-    }
-    void setPrompt(const string &p)
-    {
-        prompt = p;
-    }
-    JobsList *getJobsList()
-    {
-        return jobs;
-    }
-    void setFgPid(pid_t pid)
-    {
-        fg_pid = pid;
-    }
-    pid_t getFgPid() const
-    {
-        return fg_pid;
-    }
-    const string& getLastDir() const{
-        return last_dir;
-    }
-    void setLastDir(const string& dir)
-    {
-        last_dir = dir;
-    }
-};
 
 #endif // SMASH_COMMAND_H_
