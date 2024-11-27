@@ -75,7 +75,7 @@ void _removeBackgroundSign(char *cmd_line) {
 
 // TODO: Add your implementation for classes in Commands.h
 //TODO change to jobs(new JobsList())
-SmallShell::SmallShell() : prompt("smash"), jobs(nullptr), fg_pid(-1), last_dir("")
+SmallShell::SmallShell() : prompt("smash"), jobs(nullptr),  last_dir(""), fg_pid(-1)
 {
   // TODO: add your implementation
 }
@@ -139,7 +139,9 @@ void SmallShell::executeCommand(const char *cmd_line)
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
 {
 }
-
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
+{
+}
 void GetCurrDirCommand::execute()
 {
 
@@ -149,7 +151,7 @@ void GetCurrDirCommand::execute()
 }
 
 /* TODO: Add your implementation here::::::::::MEIR*/
-ChangeDirCommand::ChangeDirCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line), smash(smash)
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line)
 {
 }
 void ChangeDirCommand::execute()
@@ -223,8 +225,10 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line)
 Command::Command(const char *cmd_line) : cmd_line(cmd_line)
 {
 }
-
-ChangePromptCommand::ChangePromptCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line), smash(smash)
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
+{
+}
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line)
 {
 }
 

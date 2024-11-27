@@ -79,8 +79,10 @@ class ChangePromptCommand : public BuiltInCommand
 public:
     ChangePromptCommand(const char *cmd_line);
     virtual ~ChangePromptCommand() = default;
+    ChangePromptCommand(const char *cmd_line, SmallShell &smash);
     void execute() override;
-} class RedirectionCommand : public Command
+} ;
+class RedirectionCommand : public Command
 {
     // TODO: Add your data members
 private:
@@ -203,7 +205,7 @@ public:
 
     int getMaxJobId() const
     {
-        return last_job_id;
+        return max_job_id;
     }
 
     // TODO: Add extra methods or modify exisitng ones as needed
@@ -315,16 +317,16 @@ private:
     // TODO: Add your data members
     string prompt;                    // current shell prompt
     string current_dir;               // current working directory
-    string prev_dir;                  // previous working directory
+    string last_dir;                  // previous working directory
     JobsList *jobs;                   // Jobs list
     pid_t fg_pid;                     // current foreground process id
     std::map<string, string> aliases; // aliases
 
-    SmallShell();
+    
 
 public:
     Command *CreateCommand(const char *cmd_line);
-
+    SmallShell();
     SmallShell(SmallShell const &) = delete;     // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
     static SmallShell &getInstance()             // make SmallShell singleton
