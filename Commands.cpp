@@ -73,9 +73,7 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h
-//TODO change to jobs(new JobsList())
-SmallShell::SmallShell() : prompt("smash"),  current_dir(""), last_dir(""),jobs(nullptr), fg_pid(-1)
+SmallShell::SmallShell() : prompt("smash"),  current_dir(""), last_dir(""),jobs(new JobsList()), fg_pid(-1)
 {
  
 }
@@ -268,6 +266,71 @@ void ChangeDirCommand::execute()
   }
 }
 
+
+JobsList::JobEntry::JobEntry(int job_id, pid_t pid, const string& cmd_line) : job_id(job_id), prcs_id(pid), cmd_line(cmd_line)
+{}
+JobsList::JobsList() : max_job_id(0)
+{}
+
+void JobsList::addJob(Command* cmd, pid_t pid)
+{
+  removeFinishedJobs();
+  max_job_id++;
+  jobs.push_back(JobEntry(max_job_id, pid, cmd->getCmdLine()));
+  
+}
+
+void JobsList::printJobsList()
+{
+  removeFinishedJobs();
+  for (const JobEntry& job : jobs)
+  {
+    cout << "[" << job.getPid() << "] " << job.getCmdLine() <<endl;
+  }
+}
+
+void JobsList::removeFinishedJobs(){
+  auto it = jobs.begin();
+  while (it != jobs.end())
+  {
+    int status;
+    if (WIFEXITED(status) || WIFSIGNALED(status))
+    {
+      it = jobs.erase(it);
+    }
+    else
+    {
+      ++it;
+    }
+  }
+}
+JobsList::JobEntry* JobsList::getJobById(int jobId)
+{
+  for (JobEntry& job : jobs)
+  {
+    if (job.getJobId() == jobId)
+    {
+      return &job;
+    }
+  }
+  return nullptr;
+}
+
+void JobsList::removeJobById(int jobId)
+{
+  jobs.erase(std::remove_if(jobs.begin(), jobs.end(),
+    [jobId](const JobEntry& job) { return job.getJobId() == jobId; }),
+    jobs.end());
+}
+JobsList::JobEntry* JobsList::getLastJob(int* lastJobId)
+{
+  if (jobs.empty())
+  {
+    return nullptr;
+  }
+  int* lastJobId = jobs.back().getPid();
+  return &jobs.back();
+}
 BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line)
 {
 }
