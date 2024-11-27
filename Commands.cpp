@@ -73,22 +73,24 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h 
-
-SmallShell::SmallShell() : prompt("smash"), jobs(nullptr), fg_pid(-1), lastDir("") {
-// TODO: add your implementation
+// TODO: Add your implementation for classes in Commands.h
+//TODO change to jobs(new JobsList())
+SmallShell::SmallShell() : prompt("smash"), jobs(nullptr), fg_pid(-1), last_dir("")
+{
+  // TODO: add your implementation
 }
-
-SmallShell::~SmallShell() {
-// TODO: add your implementation
+SmallShell::~SmallShell()
+{
+  // delete jobs;
 }
 
 /**
-* Creates and returns a pointer to Command class which matches the given command line (cmd_line)
-*/
-Command *SmallShell::CreateCommand(const char *cmd_line) {
-    // For example:
-  
+ * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
+ */
+Command *SmallShell::CreateCommand(const char *cmd_line)
+{
+  // For example:
+
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
@@ -104,82 +106,111 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
   else if (firstWord.compare("cd") == 0) {
     return new ChangeDirCommand(cmd_line, getInstance());
   }
-  
-  // else {
-  //   return new ExternalCommand(cmd_line);
-  // }
-  
-    return nullptr;
+  else if (firstWord.compare("jobs") == 0)
+  {
+    return new JobsCommand(cmd_line, jobs);
+  }
+  else if (firstWord.compare("fg") == 0)
+  {
+    return new ForegroundCommand(cmd_line, jobs);
+  }
+
+  else if (firstWord.compare("quit") == 0)
+  {
+    return new QuitCommand(cmd_line, jobs);
+  }
+  else
+  {
+    return new ExternalCommand(cmd_line);
+  }
+
+  return nullptr;
 }
 
-void SmallShell::executeCommand(const char *cmd_line) {
-    // TODO: Add your implementation here
-    // for example:
-    Command* cmd = CreateCommand(cmd_line);
-    cmd->execute();
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
+void SmallShell::executeCommand(const char *cmd_line)
+{
+  // TODO: Add your implementation here
+  // for example:
+  Command *cmd = CreateCommand(cmd_line);
+  cmd->execute();
+  // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
 {
-
 }
 
-void GetCurrDirCommand::execute() {
+void GetCurrDirCommand::execute()
+{
 
-  char* currDir = get_current_dir_name();
+  char *currDir = get_current_dir_name();
   cout << currDir << endl;
   free(currDir);
 }
 
-
 /* TODO: Add your implementation here::::::::::MEIR*/
-ChangeDirCommand::ChangeDirCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line), smash(smash) {
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line), smash(smash)
+{
 }
-void ChangeDirCommand::execute() {
-  char** args = (char **) malloc(sizeof(char*) * 21);
+void ChangeDirCommand::execute()
+{
+  char **args = (char **)malloc(sizeof(char *) * 21);
   int len = _parseCommandLine(cmd_line, args);
-  if (len == 1) {
+  if (len == 1)
+  {
     free(args[0]);
     free(args);
     return;
   }
-  if (len == 2) {
+  if (len == 2)
+  {
     string currDir = string(get_current_dir_name());
-    if (strcmp(args[1], "-") == 0) {
-      if (smash.getLastDir() == "") {
+    if (strcmp(args[1], "-") == 0)
+    {
+      if (smash.getLastDir() == "")
+      {
         perror("smash error: cd: OLDPWD not set");
         return;
       }
-      else {
-        if (chdir(smash.getLastDir().c_str()) != 0) {
+      else
+      {
+        if (chdir(smash.getLastDir().c_str()) != 0)
+        {
           perror("smash error: chdir failed");
         }
-        else {
+        else
+        {
           smash.setLastDir(currDir);
         }
-      };      
+      };
     }
-    else if (strcmp(args[1], "..") == 0) {
-      if (chdir("..") != 0) {
-          perror("smash error: chdir failed");
-        }
-        else {
-          smash.setLastDir(currDir);
-        }
+    else if (strcmp(args[1], "..") == 0)
+    {
+      if (chdir("..") != 0)
+      {
+        perror("smash error: chdir failed");
+      }
+      else
+      {
+        smash.setLastDir(currDir);
+      }
     }
-    else if (chdir(args[1]) != 0) {
+    else if (chdir(args[1]) != 0)
+    {
       perror("smash error: chdir failed");
     }
-    else {
+    else
+    {
       smash.setLastDir(currDir);
     }
   }
-  else {
+  else
+  {
     perror("smash error: cd: too many arguments");
   }
 
-  for (int i = 1; args[i] != NULL; i++) {
+  for (int i = 1; args[i] != NULL; i++)
+  {
     free(args[i]);
   }
   free(args);
@@ -193,15 +224,16 @@ Command::Command(const char *cmd_line) : cmd_line(cmd_line)
 {
 }
 
-ChangePromptCommand::ChangePromptCommand(const char *cmd_line, SmallShell & smash) : BuiltInCommand(cmd_line), smash(smash)
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line, SmallShell &smash) : BuiltInCommand(cmd_line), smash(smash)
 {
-
 }
 
-void ChangePromptCommand::execute() {
-  char** args = (char **) malloc(sizeof(char*) * 21);
+void ChangePromptCommand::execute()
+{
+  char **args = (char **)malloc(sizeof(char *) * 21);
   int len = _parseCommandLine(cmd_line, args);
-  if (len == 1) {
+  if (len == 1)
+  {
     free(args[0]);
     free(args);
     smash.setPrompt("smash");
@@ -209,7 +241,8 @@ void ChangePromptCommand::execute() {
   }
 
   string prompt = string(args[1]);
-  for (int i = 1; args[i] != NULL; i++) {
+  for (int i = 1; args[i] != NULL; i++)
+  {
     free(args[i]);
   }
   free(args);
