@@ -12,6 +12,8 @@
 using namespace std;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
+vector<string> bltin_commands = {"chprompt", "cd", "showpid", "jobs", "fg", "pwd", "quit", "kill", "alias", "unalias", "whoami", "listdir", "netinfo"};
+
 
 #if 0
 #define FUNC_ENTRY() \
@@ -96,13 +98,27 @@ SmallShell::~SmallShell()
 /**
  * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
  */
-Command *SmallShell::CreateCommand(const char *cmd_line)
+Command *SmallShell::CreateCommand(char *cmd_line_arg) //i deleted const
 {
-  // For example:
-
+  char* cmd_line = cmd_line_arg;
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-
+  if (cmd_s[cmd_s.length() - 1] == '&') {
+    for (auto command : bltin_commands) {
+      if(firstWord.substr(0, firstWord.length() - 1).compare(command) == 0 || firstWord.compare(command) == 0) {
+        for (int i = strlen(cmd_line) - 1 ; i >= 0 ; i--) {
+          if (cmd_line[i] == '&') {
+            cmd_line[i] = '\0';                         //handling cmd_line with & for bltin commands
+            break;
+          }          
+        }
+        if (firstWord[firstWord.length() - 1] == '&') { //handling ifrst word with & for bltin commands
+          firstWord = firstWord.substr(0, firstWord.length() - 1);
+          }
+        break;        
+      }
+    }
+  }
   if (firstWord.compare("pwd") == 0) {
     return new GetCurrDirCommand(cmd_line);
   }
@@ -138,6 +154,22 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
   {
     return new AliasCommand(cmd_line);
   }
+  else if (firstWord.compare("unalias") == 0)
+  {
+    return new UnaliasCommand(cmd_line);
+  }
+  // else if (firstWord.compare("whoami") == 0)
+  // {
+  //   return new WhoAmICommand(cmd_line);
+  // }
+  // else if (firstWord.compare("listdir") == 0)
+  // {
+  //   return new ListDirCommand(cmd_line);
+  // }
+  // else if (firstWord.compare("netinfo") == 0)
+  // {
+  //   return new NetInfoCommand(cmd_line);
+  // }
   else
   {
     return new ExternalCommand(cmd_line);
@@ -152,13 +184,33 @@ void SmallShell::executeCommand(const char *cmd_line)
   {
     jobs->removeFinishedJobs();
   }
-  Command *cmd = CreateCommand(cmd_line);
-  if (cmd != nullptr)
+  char * cmd_line_copy = strdup(cmd_line); //const...
+  Command *cmd = CreateCommand(cmd_line_copy);
+  if (dynamic_cast<ExternalCommand*>(cmd) != nullptr) {
+    pid_t pid = fork();
+    if (pid == -1) {
+      perror("smash error: fork failed");
+      return;
+    }
+    if (pid == 0) {
+      if (setpgrp() == -1) perror("smash error: setpgrp failed"); //needed?
+      cmd->execute(); //son never returns...
+    }
+    else if (pid > 0) {
+      if (!_isBackgroundCommand(cmd_line_copy)) {
+        int status;
+        waitpid(pid, &status, 0);
+      }
+      else{
+        jobs->addJob(cmd, pid);
+      }
+    }
+  }
+  else if (cmd != nullptr) //not external
   {
     cmd->execute();
-    delete cmd;
   }
-  // Please note that you must fork smash process for some commands (e.g., external commands....)
+  delete cmd;
 }
 
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
@@ -285,7 +337,7 @@ JobsList::JobsList() : max_job_id(0)
 
 void JobsList::addJob(Command* cmd, pid_t pid)
 {
-  removeFinishedJobs();
+  // removeFinishedJobs();
   max_job_id++;
   jobs.push_back(JobEntry(max_job_id, pid, cmd->getCmdLine()));
   
@@ -314,6 +366,7 @@ void JobsList::removeFinishedJobs(){
   while (it != jobs.end())
   {
     int status;
+    waitpid(it->getPid(), &status, WNOHANG);
     if (WIFEXITED(status) || WIFSIGNALED(status))
     {
       it = jobs.erase(it);
@@ -465,11 +518,20 @@ void ForegroundCommand::execute()
 }
 
 ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line)
-{
-}
+{}
 
-void ExternalCommand::execute()
-{
+void ExternalCommand::execute(){
+  char * cmd_line_copy = strdup(cmd_line);
+  _removeBackgroundSign(cmd_line_copy);
+  char **args = new char*[COMMAND_MAX_ARGS];
+  // int args_len = 
+  _parseCommandLine(cmd_line_copy, args);
+  
+  if (execvp(args[0], args) == -1) {                            //execvp handles both PATH and path execution
+      perror("smash error: execvp failed");
+      exit(1);
+  }
+  
 }
 
 PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line)
@@ -497,13 +559,13 @@ void AliasCommand::execute()
     cerr<<"smash error: alias: " << alias_name << " already exists or is a reserved command "<<endl;
     return;
   }
-  vector<string> commands = {"chprompt", "cd", "showpid", "jobs", "fg", "pwd", "quit", "kill", "alias", "unalias", "whoami", "listdir", "netinfo"};
-  if (find(commands.begin(), commands.end(), alias_name) != commands.end()){
+  if (find(bltin_commands.begin(), bltin_commands.end(), alias_name) != bltin_commands.end()){
     cerr<<"smash error: alias: " << alias_name << " already exists or is a reserved command "<<endl;
     return;
   }
   SmallShell::getInstance().setAlias(alias_name, alias_cmd_line);
 }
+
 
 ShowPidCommand::ShowPidCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
 {
@@ -514,4 +576,25 @@ void ShowPidCommand::execute()
   pid_t pid = getpid();
   if (pid == -1) {perror("smash error: showpid failed"); return;}
   cout << "smash pid is " << pid << endl;
+}
+
+UnaliasCommand::UnaliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
+{
+}
+
+void UnaliasCommand::execute()
+{
+  char **args = new char*[COMMAND_MAX_ARGS];
+  int args_len = _parseCommandLine(cmd_line, args);
+  if (args_len == 1){
+    cerr<<"smash error: unalias: not enough arguments"<<endl;
+    return;
+  }
+  for (int i = 1; i < args_len; i++){
+    if (SmallShell::getInstance().getAlias(args[i]) == nullptr){
+      cerr<<"smash error: unalias: " << args[i] << " alias does not exist"<<endl;
+      return;
+    }
+    SmallShell::getInstance().removeAlias(args[i]);
+  }  
 }

@@ -1,5 +1,6 @@
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
+#include <fcntl.h>
 
 #include <vector>
 #include <map>
@@ -9,7 +10,7 @@ using std::string;
 #define COMMAND_MAX_ARGS (20)
 
 
-
+//TO_DO aliases to print in insertion order.
 
 class Command
 {
@@ -122,7 +123,7 @@ private:
     static SmallShell* instance; 
 
 public:
-    Command *CreateCommand(const char *cmd_line);
+    Command *CreateCommand(char *cmd_line);
     SmallShell(SmallShell const &) = delete;     // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
     static SmallShell &getInstance()             // make SmallShell singleton
@@ -184,6 +185,10 @@ public:
             std::cout << it->first << "=" << it->second << std::endl;
         }
     }
+    void removeAlias(char* alias)
+    {
+        aliases.erase(string(alias));
+    }
 };
 
 
@@ -203,9 +208,7 @@ class ExternalCommand : public Command
 public:
     ExternalCommand(const char *cmd_line);
 
-    virtual ~ExternalCommand()
-    {
-    }
+    virtual ~ExternalCommand() = default;
 
     void execute() override;
 };
