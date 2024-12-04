@@ -339,18 +339,6 @@ public:
     void execute() override;
 };
 
-class WhoAmICommand : public Command
-{
-public:
-    WhoAmICommand(const char *cmd_line);
-
-    virtual ~WhoAmICommand()
-    {
-    }
-
-    void execute() override;
-};
-
 class NetInfo : public Command
 {
     // TODO: Add your data members
@@ -397,6 +385,14 @@ class RedirectionCommand : public SpecialCommand
 
     virtual ~RedirectionCommand() = default;
 
+    void execute() override;
+};
+
+class WhoAmICommand : public SpecialCommand
+{
+public:
+    WhoAmICommand(const char *cmd_line) : SpecialCommand(cmd_line) {}
+    virtual ~WhoAmICommand() = default;
     void execute() override;
 };
 

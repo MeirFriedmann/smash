@@ -103,6 +103,8 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) //i deleted const
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
   if (cmd_s[cmd_s.length() - 1] == '&') {
+    //builtin commands ignore &
+    //special commands listdir and netinfo and whoami ignore &?
     for (auto command : reserved_commands) {
       if(firstWord.substr(0, firstWord.length() - 1).compare(command) == 0 || firstWord.compare(command) == 0) {
         for (int i = strlen(cmd_line) - 1 ; i >= 0 ; i--) {
@@ -118,6 +120,7 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) //i deleted const
       }
     }
   }
+
   if (reserved_commands.end() != find(reserved_commands.begin(), reserved_commands.end(), firstWord)) {
     regex pattern(firstWord + "* [>]{1,2} [^ ]+");
     if(regex_match(cmd_s, pattern)){
@@ -169,10 +172,10 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) //i deleted const
   {
     return new UnaliasCommand(cmd_line);
   }
-  // else if (firstWord.compare("whoami") == 0)
-  // {
-  //   return new WhoAmICommand(cmd_line);
-  // }
+  else if (firstWord.compare("whoami") == 0)
+  {
+    return new WhoAmICommand(cmd_line);
+  }
   // else if (firstWord.compare("listdir") == 0)
   // {
   //   return new ListDirCommand(cmd_line);
@@ -379,7 +382,7 @@ void JobsList::removeFinishedJobs(){
     int status;
     int pid = waitpid(it->getPid(), &status, WNOHANG);
     if (pid == -1) {perror("smash error: waitpid failed"); return;}
-    //if (WIFEXITED(status) ||WIFEXITED(status)) doesnt work for some reason. always true even if running
+    // if (WIFEXITED(status) || WIFSIGNALED(status)) doesnt work for some reason. always true even if running
     if (pid > 0)
     {
       it = jobs.erase(it);
@@ -642,3 +645,81 @@ void RedirectionCommand::execute()
   if (dup2(prev_from_fd, from_fd) == -1) {perror("smash error: dup2 failed"); return;}
 
 }
+
+void WhoAmICommand::execute()
+{
+  string etc_passwd_path = "/etc/passwd";
+  int fd = open(etc_passwd_path.c_str(), O_RDONLY);
+  if (fd == -1){perror("smash error: open failed");return;}
+  char buffer[1];
+  ssize_t bytes_read;
+  string passwd_content;
+  while ((bytes_read = read(fd, buffer, 1)) != 0) {
+    if (bytes_read == -1){perror("smash error: read failed"); return;}
+    passwd_content += buffer[0];
+  }
+  // char buffer[10000];
+  // ssize_t bytes_read = read(fd, buffer, 10000);
+  // if (bytes_read == -1){perror("smash error: read failed"); return;}
+  // string passwd_content;
+  // for (int i = 0; i < bytes_read; ++i) {
+  //   passwd_content += buffer[i];
+  // }
+  string uid_str = to_string(getuid());
+  int colon_counter = 0;
+  for (size_t i = 0; i < passwd_content.length(); i++){
+    if (passwd_content[i] == ':') {
+      colon_counter++;
+      if (colon_counter % 6 == 2){
+        if (passwd_content.substr(i+1, uid_str.length()).compare(uid_str) == 0) {
+          int user_id_start = colon_counter < 6 ? 0 : passwd_content.find_last_of('\n', i) + 1;
+          int user_id_end = passwd_content.find(':', user_id_start);
+          string user_id = passwd_content.substr(user_id_start, user_id_end - user_id_start);
+          int home_dir_start = i;
+          for (int j = 0; j < 3; j++){
+            home_dir_start = passwd_content.find(':', home_dir_start + 1);
+          }
+          int home_dir_end = passwd_content.find(':', home_dir_start+1);
+          home_dir_start++;
+          string home_dir = passwd_content.substr(home_dir_start, home_dir_end - home_dir_start);
+          cout << user_id << " " << home_dir << endl;
+          return;
+            }  
+        }
+    }
+
+  }
+
+
+// size_t pos = 0;
+// int colon_count = 0;
+// string passwd_row = passwd_content.substr(0, passwd_content.find('\n'));
+// while (pos < passwd_content.length()) {
+// cout<<passwd_row<<endl;
+
+//   while (colon_count < 2) {
+//     if (passwd_content[pos] == ':') {
+//         colon_count++;
+//       }
+//       pos++;
+//     }
+//   if (passwd_row.substr(pos, uid_str.length()) == uid_str) {
+//     cout << "smash: user is " << endl;
+//     return;
+// }
+// else{
+//   colon_count = 0;
+//   size_t prev_pos = pos;
+//   pos = passwd_content.find('\n',pos)+1;
+//   passwd_row = passwd_content.substr(pos,
+//    passwd_content.find('\n',pos) - passwd_content.find('\n',prev_pos));
+// }
+
+
+// }
+  if (close(fd) == -1)
+  {
+    perror("smash error: close failed");
+  }
+}
+
