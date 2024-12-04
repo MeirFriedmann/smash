@@ -78,7 +78,7 @@ private:
 public:
     JobsList();
 
-    ~JobsList();
+    ~JobsList() = default;
 
     void addJob(Command *cmd, pid_t pid);
 
@@ -191,7 +191,12 @@ public:
     }
 };
 
-
+class SpecialCommand : public Command
+{
+public:
+    SpecialCommand(const char *cmd_line) : Command(cmd_line) {}
+    virtual ~SpecialCommand() = default;
+};
 
 class BuiltInCommand : public Command
 {
@@ -233,20 +238,6 @@ public:
     
     void execute() override;
 } ;
-class RedirectionCommand : public Command
-{
-private:
-    string cmd;
-    string filename;
-    bool is_append;
-
-public:
-    explicit RedirectionCommand(const char *cmd_line);
-
-    virtual ~RedirectionCommand() = default;
-
-    void execute() override;
-};
 
 class ChangeDirCommand : public BuiltInCommand
 {
@@ -304,9 +295,7 @@ class JobsCommand : public BuiltInCommand
 public:
     JobsCommand(const char *cmd_line, JobsList* jobs);
 
-    virtual ~JobsCommand()
-    {
-    }
+    virtual ~JobsCommand() = default;
 
     void execute() override;
 };
@@ -395,6 +384,18 @@ public:
     virtual ~UnaliasCommand()
     {
     }
+
+    void execute() override;
+};
+
+class RedirectionCommand : public SpecialCommand
+{
+    private:
+    const char* inner_cmd_line;
+    public:
+    RedirectionCommand(const char *cmd_line, const char* inner_cmd_line) : SpecialCommand(cmd_line), inner_cmd_line(inner_cmd_line){}
+
+    virtual ~RedirectionCommand() = default;
 
     void execute() override;
 };
