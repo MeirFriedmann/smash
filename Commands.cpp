@@ -564,339 +564,449 @@ void ForegroundCommand::execute()
 {
   char **args = new char *[COMMAND_MAX_ARGS];
   int args_len = _parseCommandLine(cmd_line, args);
-  if (args_len == 1)
+  JobsList::JobEntry *job = nullptr;
+  if (args_len == 1) // fg max job
   {
     if (jobs->getLastJob() == nullptr)
     {
       cerr << ("smash error: fg: jobs list is empty") << endl;
+      for (int i = 0; i < args_len; i++)
+      {
+        free(args[i]);
+      }
+      delete[] args;
       return;
     }
-    else
-    {
-      cout << jobs->getLastJob()->getCmdLine() << " " << jobs->getLastJob()->getPid() << endl;
-      jobs->removeJobById(jobs->getLastJob()->getJobId());
-      waitpid(jobs->getLastJob()->getPid(), nullptr, WUNTRACED);
-      return;
-    }
+    job = jobs->getLastJob();
   }
   else if (args_len == 2)
   {
     if (args[1][0] == '0')
     {
-      cout << ("smash error: fg: invalid arguments") << endl;
+      cerr << "smash error: fg: invalid arguments" << endl;
+      for (int i = 0; i < args_len; i++)
+      {
+        free(args[i]);
+      }
+      delete[] args;
       return;
     }
-    auto ptr = args[1];
-    while (*ptr)
+    for (char *p = args[1]; *p; p++)
     {
-      if (!isdigit(*ptr))
+      if (!isdigit(*p))
       {
-        cout << ("smash error: fg: invalid arguments") << endl;
+        cerr << "smash error: fg: invalid arguments" << endl;
+        for (int i = 0; i < args_len; i++)
+          free(args[i]);
+        delete[] args;
         return;
       }
-      else
-        ++ptr;
     }
-    JobsList::JobEntry *job = jobs->getJobById(atoi(args[1]));
-    if (job == nullptr)
+
+    for (char *p = args[1]; *p; p++) // contains only digits
     {
-      cerr << ("smash error: fg: job does not exist") << endl;
-      return;
-    }
-    else
-    {
-      cout << job->getCmdLine() << " " << job->getPid() << endl;
-      jobs->removeJobById(atoi(args[1]));
-      waitpid(job->getPid(), nullptr, WUNTRACED);
-      return;
-    }
-  }
-  else
-  {
-    cerr << ("smash error: fg: too many arguments") << endl;
-  }
-}
-
-ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line)
-{
-}
-
-void ExternalCommand::execute()
-{
-  char *cmd_line_copy = strdup(cmd_line); // should be freed
-  _removeBackgroundSign(cmd_line_copy);
-  char **args = new char *[COMMAND_MAX_ARGS];
-  // int args_len =
-  _parseCommandLine(cmd_line_copy, args);
-
-  if (execvp(args[0], args) == -1)
-  { // execvp handles both PATH and path execution
-    perror("smash error: execvp failed");
-    exit(1);
-  }
-}
-
-PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line)
-{
-}
-
-void PipeCommand::execute()
-{
-}
-
-AliasCommand::AliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
-{
-}
-
-void AliasCommand::execute()
-{
-  if (regex_match(cmd_line, regex("^alias$")))
-  {
-    SmallShell::getInstance().printAliases();
-    return;
-  }
-  if (!regex_match(cmd_line, regex("^alias [a-zA-Z0-9_]+='[^']*'$")))
-  {
-    cerr << "smash error: alias: invalid alias format" << endl;
-    return;
-  }
-  string cmd_s = (string(cmd_line));
-  string alias_name = cmd_s.substr(6, cmd_s.find_first_of("=") - 6);                                                          // 6 for length of "alias "
-  string alias_cmd_line = cmd_s.substr(cmd_s.find_first_of("'") + 1, cmd_s.find_last_of("'") - cmd_s.find_first_of("'") - 1); // -1 so we wont include last '
-  if (SmallShell::getInstance().getAlias(alias_name) != nullptr)
-  {
-    cerr << "smash error: alias: " << alias_name << " already exists or is a reserved command " << endl;
-    return;
-  }
-  if (find(reserved_commands.begin(), reserved_commands.end(), alias_name) != reserved_commands.end())
-  {
-    cerr << "smash error: alias: " << alias_name << " already exists or is a reserved command " << endl;
-    return;
-  }
-  SmallShell::getInstance().setAlias(alias_name, alias_cmd_line);
-}
-
-ShowPidCommand::ShowPidCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
-{
-}
-
-void ShowPidCommand::execute()
-{
-  pid_t pid = getpid();
-  if (pid == -1)
-  {
-    perror("smash error: getpid failed");
-    return;
-  }
-  cout << "smash pid is " << pid << endl;
-}
-
-UnaliasCommand::UnaliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
-{
-}
-
-void UnaliasCommand::execute()
-{
-  char **args = new char *[COMMAND_MAX_ARGS];
-  int args_len = _parseCommandLine(cmd_line, args);
-  if (args_len == 1)
-  {
-    cerr << "smash error: unalias: not enough arguments" << endl;
-    return;
-  }
-  for (int i = 1; i < args_len; i++)
-  {
-    if (SmallShell::getInstance().getAlias(args[i]) == nullptr)
-    {
-      cerr << "smash error: unalias: " << args[i] << " alias does not exist" << endl;
-      return;
-    }
-    SmallShell::getInstance().removeAlias(args[i]);
-  }
-}
-void ListDirCommand::printIndentation(int depth)
-{
-  // Print tab for each level of depth
-  for (int i = 0; i < depth; i++)
-  {
-    cout << "\t";
-  }
-}
-void ListDirCommand::printDirectoryContents(const string &path, int depth)
-{
-  // Open directory using open() system call
-  int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
-  if (fd == -1)
-  {
-    perror("smash error: open failed");
-    return;
-  }
-
-  vector<string> entries;
-
-  // Buffer for getdents64
-  char buffer[4096];
-  struct linux_dirent64 *entry;
-
-  // Use getdents64 system call to read directory entries
-  int nread;
-  while ((nread = syscall(SYS_getdents64, fd, buffer, sizeof(buffer))) > 0)
-  {
-    for (int pos = 0; pos < nread;)
-    {
-      entry = (struct linux_dirent64 *)(buffer + pos);
-      string name = entry->d_name;
-
-      if (name != "." && name != "..")
+      if (!isdigit(*p))
       {
-        entries.push_back(name);
-      }
-
-      pos += entry->d_reclen;
-    }
-  }
-
-  if (nread == -1)
-  {
-    perror("smash error: getdents64 failed");
-    close(fd);
-    return;
-  }
-
-  // Sort and print contents
-  sort(entries.begin(), entries.end());
-
-  // First print directories
-  for (const string &ent : entries)
-  {
-    string full_path = path + "/" + ent;
-    struct stat statbuf;
-
-    if (stat(full_path.c_str(), &statbuf) != -1)
-    {
-      printIndentation(depth);
-      cout << ent << endl;
-      if (S_ISDIR(statbuf.st_mode))
-      {
-        printDirectoryContents(full_path, depth + 1);
-      }
-    }
-    else
-    {
-      perror("smash error: stat failed");
-    }
-  }
-
-  close(fd);
-}
-void ListDirCommand::execute()
-{
-
-
-}
-void RedirectionCommand::execute()
-{
-  char **args = new char *[COMMAND_MAX_ARGS]; // cmd_line is > filename or >> filename
-  _parseCommandLine(cmd_line, args);
-  const char *to_file_path = strdup(args[1]); // Remember to free() this later
-  pid_t pid = getpid();
-  if (pid == -1)
-  {
-    perror("smash error: getpid failed");
-    return;
-  }
-  int to_file_fd;
-  if (strcmp(args[0], ">") == 0)
-  {
-    to_file_fd = open(to_file_path, O_WRONLY | O_TRUNC | O_CREAT, S_IWUSR);
-  }
-  else
-  {
-    to_file_fd = open(to_file_path, O_WRONLY | O_APPEND | O_CREAT, S_IWUSR);
-  }
-  if (to_file_fd == -1)
-  {
-    perror("smash error: open failed");
-    return;
-  }
-  int prev_from_fd = dup(1);
-  if (prev_from_fd == -1)
-  {
-    perror("smash error: dup failed");
-    return;
-  }
-  if (dup2(to_file_fd, 1) == -1)
-  {
-    perror("smash error: dup2 failed");
-    return;
-  }
-  SmallShell::getInstance().executeCommand(inner_cmd_line);
-  if (dup2(prev_from_fd, 1) == -1)
-  {
-    perror("smash error: dup2 failed");
-    return;
-  }
-  if (close(to_file_fd) == -1)
-  {
-    perror("smash error: close failed");
-    return;
-  } // at the end so file pointer is at place.
-  if (close(prev_from_fd) == -1)
-  {
-    perror("smash error: close failed");
-    return;
-  }
-}
-
-void WhoAmICommand::execute()
-{
-  string etc_passwd_path = "/etc/passwd";
-  int fd = open(etc_passwd_path.c_str(), O_RDONLY);
-  if (fd == -\)
-  {
-    perror("smash error: open failed");
-    return;
-  }
-  char buffer[1];
-  ssize_t bytes_read;
-  string passwd_content;
-  while ((bytes_read = read(fd, buffer, 1)) != 0)
-  {
-    if (bytes_read == -1)
-    {
-      perror("smash error: read failed");
-      return;
-    }
-    passwd_content += buffer[0];
-  }
-  string uid_str = to_string(getuid());
-  int colon_counter = 0;
-  for (size_t i = 0; i < passwd_content.length(); i++)
-  {
-    if (passwd_content[i] == ':')
-    {
-      colon_counter++;
-      if (colon_counter % 6 == 2)
-      {
-        if (passwd_content.substr(i + 1, uid_str.length()).compare(uid_str) == 0)
+        cerr << "smash error: fg: invalid arguments" << endl;
+        for (int i = 0; i < args_len; i++)
         {
-          int user_id_start = colon_counter < 6 ? 0 : passwd_content.find_last_of('\n', i) + 1;
-          int user_id_end = passwd_content.find(':', user_id_start);
-          string user_id = passwd_content.substr(user_id_start, user_id_end - user_id_start);
-          int home_dir_start = i;
-          for (int j = 0; j < 3; j++)
-          {
-            home_dir_start = passwd_content.find(':', home_dir_start + 1);
-          }
-          int home_dir_end = passwd_content.find(':', home_dir_start + 1);
-          home_dir_start++;
-          string home_dir = passwd_content.substr(home_dir_start, home_dir_end - home_dir_start);
-          cout << user_id << " " << home_dir << endl;
-          return;
+          free(args[i]);
+        }
+        delete[] args;
+        return;
+      }
+    }
+    int job_id = atoi(args[1]);
+    job = jobs->getJobById(job_id);
+    if (!job)
+    {
+      cerr << "smash error: fg: job-id " << job_id << " does not exist" << endl;
+      for (int i = 0; i < args_len; i++)
+      {
+        free(args[i]);
+      }
+      delete[] args;
+      return;
+    }
+    else
+    {
+      cerr << ("smash error: fg: too many arguments") << endl;
+      for (int i = 0; i < args_len; i++)
+      {
+        free(args[i]);
+      }
+      delete[] args;
+      return;
+    }
+    pid_t pid = job->getPid(); // save proccess id
+    string cmd = job->getCmdLine();
+    cout << cmd << " : " << pid << endl;
+    jobs->removeJobById(job->getJobId());
+
+    SmallShell::getInstance().setFgPid(pid); // for signal handling
+    if (waitpid(pid, nullptr, WUNTRACED) == -1) // wait till process is finished
+    {
+      perror("smash error: waitpid failed");
+    }
+
+    SmallShell::getInstance().setFgPid(-1); // reset fg process
+    for (int i = 0; i < args_len; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+  }
+}
+  ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line)
+  {
+  }
+
+  void ExternalCommand::execute()
+  {
+    char *cmd_line_copy = strdup(cmd_line); // should be freed
+    _removeBackgroundSign(cmd_line_copy);
+    char **args = new char *[COMMAND_MAX_ARGS];
+    // int args_len =
+    _parseCommandLine(cmd_line_copy, args);
+
+    if (execvp(args[0], args) == -1)
+    { // execvp handles both PATH and path execution
+      perror("smash error: execvp failed");
+      exit(1);
+    }
+  }
+
+  PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line)
+  {
+  }
+
+  void PipeCommand::execute()
+  {
+  }
+
+  AliasCommand::AliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
+  {
+  }
+
+  void AliasCommand::execute()
+  {
+    if (regex_match(cmd_line, regex("^alias$")))
+    {
+      SmallShell::getInstance().printAliases();
+      return;
+    }
+    if (!regex_match(cmd_line, regex("^alias [a-zA-Z0-9_]+='[^']*'$")))
+    {
+      cerr << "smash error: alias: invalid alias format" << endl;
+      return;
+    }
+    string cmd_s = (string(cmd_line));
+    string alias_name = cmd_s.substr(6, cmd_s.find_first_of("=") - 6);                                                          // 6 for length of "alias "
+    string alias_cmd_line = cmd_s.substr(cmd_s.find_first_of("'") + 1, cmd_s.find_last_of("'") - cmd_s.find_first_of("'") - 1); // -1 so we wont include last '
+    if (SmallShell::getInstance().getAlias(alias_name) != nullptr)
+    {
+      cerr << "smash error: alias: " << alias_name << " already exists or is a reserved command " << endl;
+      return;
+    }
+    if (find(reserved_commands.begin(), reserved_commands.end(), alias_name) != reserved_commands.end())
+    {
+      cerr << "smash error: alias: " << alias_name << " already exists or is a reserved command " << endl;
+      return;
+    }
+    SmallShell::getInstance().setAlias(alias_name, alias_cmd_line);
+  }
+
+  ShowPidCommand::ShowPidCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
+  {
+  }
+
+  void ShowPidCommand::execute()
+  {
+    pid_t pid = getpid();
+    if (pid == -1)
+    {
+      perror("smash error: getpid failed");
+      return;
+    }
+    cout << "smash pid is " << pid << endl;
+  }
+
+  UnaliasCommand::UnaliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
+  {
+  }
+
+  void UnaliasCommand::execute()
+  {
+    char **args = new char *[COMMAND_MAX_ARGS];
+    int args_len = _parseCommandLine(cmd_line, args);
+    if (args_len == 1)
+    {
+      cerr << "smash error: unalias: not enough arguments" << endl;
+      return;
+    }
+    for (int i = 1; i < args_len; i++)
+    {
+      if (SmallShell::getInstance().getAlias(args[i]) == nullptr)
+      {
+        cerr << "smash error: unalias: " << args[i] << " alias does not exist" << endl;
+        return;
+      }
+      SmallShell::getInstance().removeAlias(args[i]);
+    }
+  }
+  void ListDirCommand::printIndentation(int depth)
+  {
+    // Print tab for each level of depth
+    for (int i = 0; i < depth; i++)
+    {
+      cout << "\t";
+    }
+  }
+  void ListDirCommand::printDirectoryContents(const string &path, int depth)
+  {
+    // Open directory using open() system call
+    int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd == -1)
+    {
+      perror("smash error: open failed");
+      return;
+    }
+
+    vector<string> entries;
+
+    // Buffer for getdents64
+    char buffer[4096];
+    struct linux_dirent64 *entry;
+
+    // Use getdents64 system call to read directory entries
+    int nread;
+    while ((nread = syscall(SYS_getdents64, fd, buffer, sizeof(buffer))) > 0)
+    {
+      for (int pos = 0; pos < nread;)
+      {
+        entry = (struct linux_dirent64 *)(buffer + pos);
+        string name = entry->d_name;
+
+        if (name != "." && name != "..")
+        {
+          entries.push_back(name);
+        }
+
+        pos += entry->d_reclen;
+      }
+    }
+
+    if (nread == -1)
+    {
+      perror("smash error: getdents64 failed");
+      close(fd);
+      return;
+    }
+
+    // Sort and print contents
+    sort(entries.begin(), entries.end());
+
+    // First print directories
+    for (const string &ent : entries)
+    {
+      string full_path = path + "/" + ent;
+      struct stat statbuf;
+
+      if (stat(full_path.c_str(), &statbuf) != -1)
+      {
+        printIndentation(depth);
+        cout << ent << endl;
+        if (S_ISDIR(statbuf.st_mode))
+        {
+          printDirectoryContents(full_path, depth + 1);
+        }
+      }
+      else
+      {
+        perror("smash error: stat failed");
+      }
+    }
+
+    close(fd);
+  }
+
+  void ListDirCommand::execute()
+  {
+    char **args = new char *[COMMAND_MAX_ARGS];
+    int args_len = _parseCommandLine(cmd_line, args);
+
+    if (args_len > 2)
+    {
+      cerr << "smash error: listdir: too many arguments" << endl;
+      for (int i = 0; i < args_len; i++)
+      {
+        free(args[i]);
+      }
+      delete[] args;
+      return;
+    }
+
+    string path = ".";
+    if (args_len == 2)
+    {
+      path = args[1];
+    }
+
+    for (int i = 0; i < args_len; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+    struct stat statbuf;
+    vector<string> entries;
+
+    int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd == -1)
+    {
+      perror("smash error: open failed");
+      return;
+    }
+
+    // Read root level entries first
+    char buffer[4096];
+    struct linux_dirent64 *entry;
+
+    int nread;
+    while ((nread = syscall(SYS_getdents64, fd, buffer, sizeof(buffer))) > 0)
+    {
+      for (int pos = 0; pos < nread;)
+      {
+        entry = (struct linux_dirent64 *)(buffer + pos);
+        string name = entry->d_name;
+
+        if (name != "." && name != "..")
+        {
+          entries.push_back(name);
+        }
+        pos += entry->d_reclen;
+      }
+    }
+
+    close(fd);
+
+    // Sort and process root level entries
+    sort(entries.begin(), entries.end());
+    for (const string &name : entries)
+    {
+      string fullPath = path + "/" + name;
+      if (stat(fullPath.c_str(), &statbuf) != -1)
+      {
+        cout << name << endl;
+        if (S_ISDIR(statbuf.st_mode))
+        {
+          printDirectoryContents(fullPath, 1);
         }
       }
     }
   }
-  if (close(fd) == -1)
-    perror("smash error: close failed");
-}
+  void RedirectionCommand::execute()
+  {
+    char **args = new char *[COMMAND_MAX_ARGS]; // cmd_line is > filename or >> filename
+    _parseCommandLine(cmd_line, args);
+    const char *to_file_path = strdup(args[1]); // Remember to free() this later
+    pid_t pid = getpid();
+    if (pid == -1)
+    {
+      perror("smash error: getpid failed");
+      return;
+    }
+    int to_file_fd;
+    if (strcmp(args[0], ">") == 0)
+    {
+      to_file_fd = open(to_file_path, O_WRONLY | O_TRUNC | O_CREAT, S_IWUSR);
+    }
+    else
+    {
+      to_file_fd = open(to_file_path, O_WRONLY | O_APPEND | O_CREAT, S_IWUSR);
+    }
+    if (to_file_fd == -1)
+    {
+      perror("smash error: open failed");
+      return;
+    }
+    int prev_from_fd = dup(1);
+    if (prev_from_fd == -1)
+    {
+      perror("smash error: dup failed");
+      return;
+    }
+    if (dup2(to_file_fd, 1) == -1)
+    {
+      perror("smash error: dup2 failed");
+      return;
+    }
+    SmallShell::getInstance().executeCommand(inner_cmd_line);
+    if (dup2(prev_from_fd, 1) == -1)
+    {
+      perror("smash error: dup2 failed");
+      return;
+    }
+    if (close(to_file_fd) == -1)
+    {
+      perror("smash error: close failed");
+      return;
+    } // at the end so file pointer is at place.
+    if (close(prev_from_fd) == -1)
+    {
+      perror("smash error: close failed");
+      return;
+    }
+  }
+
+  void WhoAmICommand::execute()
+  {
+    string etc_passwd_path = "/etc/passwd";
+    int fd = open(etc_passwd_path.c_str(), O_RDONLY);
+    if (fd == -1)
+    {
+      perror("smash error: open failed");
+      return;
+    }
+    char buffer[1];
+    ssize_t bytes_read;
+    string passwd_content;
+    while ((bytes_read = read(fd, buffer, 1)) != 0)
+    {
+      if (bytes_read == -1)
+      {
+        perror("smash error: read failed");
+        return;
+      }
+      passwd_content += buffer[0];
+    }
+    string uid_str = to_string(getuid());
+    int colon_counter = 0;
+    for (size_t i = 0; i < passwd_content.length(); i++)
+    {
+      if (passwd_content[i] == ':')
+      {
+        colon_counter++;
+        if (colon_counter % 6 == 2)
+        {
+          if (passwd_content.substr(i + 1, uid_str.length()).compare(uid_str) == 0)
+          {
+            int user_id_start = colon_counter < 6 ? 0 : passwd_content.find_last_of('\n', i) + 1;
+            int user_id_end = passwd_content.find(':', user_id_start);
+            string user_id = passwd_content.substr(user_id_start, user_id_end - user_id_start);
+            int home_dir_start = i;
+            for (int j = 0; j < 3; j++)
+            {
+              home_dir_start = passwd_content.find(':', home_dir_start + 1);
+            }
+            int home_dir_end = passwd_content.find(':', home_dir_start + 1);
+            home_dir_start++;
+            string home_dir = passwd_content.substr(home_dir_start, home_dir_end - home_dir_start);
+            cout << user_id << " " << home_dir << endl;
+            return;
+          }
+        }
+      }
+    }
+    if (close(fd) == -1)
+      perror("smash error: close failed");
+  }
