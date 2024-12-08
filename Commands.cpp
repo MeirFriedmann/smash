@@ -103,6 +103,7 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) //i deleted const
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
   if (cmd_s[cmd_s.length() - 1] == '&') {
+    cout << "found &" << endl;
     //builtin commands ignore &
     //special commands listdir and netinfo and whoami ignore &?
     for (auto command : reserved_commands) {
@@ -121,17 +122,17 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) //i deleted const
     }
   }
 
-  if (reserved_commands.end() != find(reserved_commands.begin(), reserved_commands.end(), firstWord)) {
     regex pattern(firstWord + "* [>]{1,2} [^ ]+");
     if(regex_match(cmd_s, pattern)){
-      int index_of_io  = cmd_s.find_last_of(" ") - 2 == ' ' ? cmd_s.find_last_of(" ") - 1 : cmd_s.find_last_of(" ") - 2;
-      printf("index of io: %d\n", index_of_io);
-      const char* inner_cmd_line = cmd_s.substr(index_of_io, cmd_s.length()-index_of_io).c_str(); //sorry for bad naming
-      const char* outer_cmd_line = cmd_s.substr(0, index_of_io).c_str();
-      return new RedirectionCommand(outer_cmd_line, inner_cmd_line);
+    size_t io_index = cmd_s.find_last_of(" ") - 2 == ' ' ? cmd_s.find_last_of(" ") - 1 : cmd_s.find_last_of(" ") - 2;
+    string inner_cmd = cmd_s.substr(0, io_index);
+    string outer_cmd = cmd_s.substr(io_index);
+    char* outer_cmd_copy = new char[outer_cmd.length() + 1];
+    char* inner_cmd_copy = new char[inner_cmd.length() + 1];
+    strcpy(outer_cmd_copy, outer_cmd.c_str());
+    strcpy(inner_cmd_copy, inner_cmd.c_str());
+    return new RedirectionCommand(outer_cmd_copy, inner_cmd_copy);
     }
-
-  }
 
   if (firstWord.compare("pwd") == 0) {
     return new GetCurrDirCommand(cmd_line);
@@ -617,33 +618,24 @@ void RedirectionCommand::execute()
 {
   char **args = new char*[COMMAND_MAX_ARGS]; //cmd_line is > filename or >> filename
   _parseCommandLine(cmd_line, args);
-  char to_file_path [strlen(args[1])+2];
-  strcpy(to_file_path, "\"");
-  strcat(to_file_path, args[1]);
-  strcat(to_file_path, "\"");
+  const char* to_file_path = strdup(args[1]);  // Remember to free() this later
   pid_t pid = getpid();
   if (pid == -1) {perror("smash error: getpid failed"); return;}
   int to_file_fd;
   if (strcmp(args[0], ">") == 0){
-    to_file_fd = open(to_file_path, O_WRONLY | O_TRUNC | O_CREAT);
+    to_file_fd = open(to_file_path, O_WRONLY | O_TRUNC | O_CREAT, S_IWUSR);
   }
   else {
-    to_file_fd = open(to_file_path, O_WRONLY | O_APPEND | O_CREAT);
+    to_file_fd = open(to_file_path, O_WRONLY | O_APPEND | O_CREAT, S_IWUSR );
   }
   if (to_file_fd == -1) {perror("smash error: open failed"); return;}
-  int from_fd = open(("/proc"+to_string(pid)+"/fd/1").c_str(), O_WRONLY | O_TRUNC); //contents of file will be overwritten
-  if (from_fd == -1) {perror("smash error: open failed"); return;}
-  int prev_from_fd = dup(from_fd);
+  int prev_from_fd = dup(1);
   if (prev_from_fd == -1) {perror("smash error: dup failed"); return;}
-  if(dup2(to_file_fd, from_fd) == -1) {perror("smash error: dup2 failed"); return;}
-  //running actual inner command
-  char * inner_cmd_line_copy = strdup(inner_cmd_line); //const... should be freed
-  Command* cmd = SmallShell::getInstance().CreateCommand(inner_cmd_line_copy); 
-  SmallShell::getInstance().executeCommand(cmd->getCmdLine()); //or instead cmd->execute ?
-  //
+  if(dup2(to_file_fd, 1) == -1) {perror("smash error: dup2 failed"); return;}
+  SmallShell::getInstance().executeCommand(inner_cmd_line);
+  if (dup2(prev_from_fd, 1) == -1) {perror("smash error: dup2 failed"); return;}
   if (close(to_file_fd) == -1) {perror("smash error: close failed"); return;} //at the end so file pointer is at place.
-  if (dup2(prev_from_fd, from_fd) == -1) {perror("smash error: dup2 failed"); return;}
-
+  if (close(prev_from_fd) == -1) {perror("smash error: close failed"); return;} 
 }
 
 void WhoAmICommand::execute()
@@ -658,13 +650,6 @@ void WhoAmICommand::execute()
     if (bytes_read == -1){perror("smash error: read failed"); return;}
     passwd_content += buffer[0];
   }
-  // char buffer[10000];
-  // ssize_t bytes_read = read(fd, buffer, 10000);
-  // if (bytes_read == -1){perror("smash error: read failed"); return;}
-  // string passwd_content;
-  // for (int i = 0; i < bytes_read; ++i) {
-  //   passwd_content += buffer[i];
-  // }
   string uid_str = to_string(getuid());
   int colon_counter = 0;
   for (size_t i = 0; i < passwd_content.length(); i++){
@@ -689,37 +674,6 @@ void WhoAmICommand::execute()
     }
 
   }
-
-
-// size_t pos = 0;
-// int colon_count = 0;
-// string passwd_row = passwd_content.substr(0, passwd_content.find('\n'));
-// while (pos < passwd_content.length()) {
-// cout<<passwd_row<<endl;
-
-//   while (colon_count < 2) {
-//     if (passwd_content[pos] == ':') {
-//         colon_count++;
-//       }
-//       pos++;
-//     }
-//   if (passwd_row.substr(pos, uid_str.length()) == uid_str) {
-//     cout << "smash: user is " << endl;
-//     return;
-// }
-// else{
-//   colon_count = 0;
-//   size_t prev_pos = pos;
-//   pos = passwd_content.find('\n',pos)+1;
-//   passwd_row = passwd_content.substr(pos,
-//    passwd_content.find('\n',pos) - passwd_content.find('\n',prev_pos));
-// }
-
-
-// }
-  if (close(fd) == -1)
-  {
-    perror("smash error: close failed");
-  }
+  if (close(fd) == -1)perror("smash error: close failed");
 }
 
