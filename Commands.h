@@ -327,16 +327,16 @@ public:
     void execute() override;
 };
 
-class ListDirCommand : public Command
+class ListDirCommand : public SpecialCommand 
 {
+
 public:
     ListDirCommand(const char *cmd_line);
-
-    virtual ~ListDirCommand()
-    {
-    }
-
+    virtual ~ListDirCommand() = default;
     void execute() override;
+private:
+    void printIndentation(int depth);
+    void printDirectoryContents(const string &path, int depth);
 };
 
 class NetInfo : public Command
