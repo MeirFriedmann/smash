@@ -9,8 +9,7 @@ using std::string;
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 
-
-//TO_DO aliases to print in insertion order.
+// TO_DO aliases to print in insertion order.
 
 class Command
 {
@@ -106,7 +105,6 @@ public:
     // TODO: Add extra methods or modify exisitng ones as needed
 };
 
-
 class SmallShell
 {
 private:
@@ -119,8 +117,8 @@ private:
     std::map<string, string> aliases; // aliases
 
     SmallShell();
-    
-    static SmallShell* instance; 
+
+    static SmallShell *instance;
 
 public:
     Command *CreateCommand(char *cmd_line);
@@ -158,18 +156,19 @@ public:
     {
         return fg_pid;
     }
-    const string& getLastDir() const{
+    const string &getLastDir() const
+    {
         return last_dir;
     }
-    void setLastDir(const string& dir)
+    void setLastDir(const string &dir)
     {
         last_dir = dir;
     }
-    void setAlias(const string& alias, const string& cmd_line)
+    void setAlias(const string &alias, const string &cmd_line)
     {
         aliases[alias] = cmd_line;
     }
-    string* getAlias(const string& alias)
+    string *getAlias(const string &alias)
     {
         auto it = aliases.find(alias);
         if (it != aliases.end())
@@ -182,10 +181,10 @@ public:
     {
         for (auto it = aliases.begin(); it != aliases.end(); it++)
         {
-            std::cout << it->first << "=" << it->second << std::endl;
+            std::cout << it->first << "=" << "'" << it->second << "'" << std::endl;
         }
     }
-    void removeAlias(char* alias)
+    void removeAlias(char *alias)
     {
         aliases.erase(string(alias));
     }
@@ -235,9 +234,9 @@ class ChangePromptCommand : public BuiltInCommand
 public:
     ChangePromptCommand(const char *cmd_line, SmallShell &smash);
     virtual ~ChangePromptCommand() = default;
-    
+
     void execute() override;
-} ;
+};
 
 class ChangeDirCommand : public BuiltInCommand
 {
@@ -245,7 +244,7 @@ class ChangeDirCommand : public BuiltInCommand
     string *last_pwd;
 
 public:
-    ChangeDirCommand(const char *cmd_line, SmallShell& smash);
+    ChangeDirCommand(const char *cmd_line, SmallShell &smash);
 
     virtual ~ChangeDirCommand() = default;
 
@@ -281,7 +280,7 @@ private:
     bool kill_flag;
 
 public:
-    QuitCommand(const char *cmd_line, JobsList* jobs);
+    QuitCommand(const char *cmd_line, JobsList *jobs);
 
     virtual ~QuitCommand() = default;
 
@@ -290,10 +289,10 @@ public:
 
 class JobsCommand : public BuiltInCommand
 {
-    JobsList* jobs;
+    JobsList *jobs;
     // TODO: Add your data members
 public:
-    JobsCommand(const char *cmd_line, JobsList* jobs);
+    JobsCommand(const char *cmd_line, JobsList *jobs);
 
     virtual ~JobsCommand() = default;
 
@@ -302,9 +301,10 @@ public:
 
 class KillCommand : public BuiltInCommand
 {
-    JobsList* jobs;
+    JobsList *jobs;
+
 public:
-    KillCommand(const char *cmd_line, JobsList* jobs);
+    KillCommand(const char *cmd_line, JobsList *jobs);
 
     virtual ~KillCommand()
     {
@@ -316,9 +316,10 @@ public:
 class ForegroundCommand : public BuiltInCommand
 {
 
-    JobsList* jobs;
+    JobsList *jobs;
+
 public:
-    ForegroundCommand(const char *cmd_line, JobsList* jobs);
+    ForegroundCommand(const char *cmd_line, JobsList *jobs);
 
     virtual ~ForegroundCommand()
     {
@@ -327,13 +328,14 @@ public:
     void execute() override;
 };
 
-class ListDirCommand : public SpecialCommand 
+class ListDirCommand : public SpecialCommand
 {
 
 public:
-    ListDirCommand(const char *cmd_line): SpecialCommand(cmd_line){};
+    ListDirCommand(const char *cmd_line) : SpecialCommand(cmd_line) {};
     virtual ~ListDirCommand() = default;
     void execute() override;
+
 private:
     void printIndentation(int depth);
     void printDirectoryContents(const string &path, int depth);
@@ -378,10 +380,11 @@ public:
 
 class RedirectionCommand : public SpecialCommand
 {
-    private:
-    const char* inner_cmd_line;
-    public:
-    RedirectionCommand(const char *cmd_line, const char* inner_cmd_line) : SpecialCommand(cmd_line), inner_cmd_line(inner_cmd_line){}
+private:
+    const char *inner_cmd_line;
+
+public:
+    RedirectionCommand(const char *cmd_line, const char *inner_cmd_line) : SpecialCommand(cmd_line), inner_cmd_line(inner_cmd_line) {}
 
     virtual ~RedirectionCommand() = default;
 
@@ -395,7 +398,5 @@ public:
     virtual ~WhoAmICommand() = default;
     void execute() override;
 };
-
-
 
 #endif // SMASH_COMMAND_H_
