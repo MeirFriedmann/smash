@@ -122,7 +122,6 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
   if (cmd_s[cmd_s.length() - 1] == '&')
   {
-    cout << "found &" << endl;
     // builtin commands ignore &
     // special commands listdir and netinfo and whoami ignore &?
     for (auto command : reserved_commands)
@@ -145,10 +144,10 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
       }
     }
   }
-
-  regex pattern(firstWord + "* [>]{1,2} [^ ]+");
+  regex pattern(firstWord + "(.*?) (>>|>) (.*)");
   if (regex_match(cmd_s, pattern))
   {
+    cout << "found >> or >" << endl;
     size_t io_index = cmd_s.find_last_of(" ") - 2 == ' ' ? cmd_s.find_last_of(" ") - 1 : cmd_s.find_last_of(" ") - 2;
     string inner_cmd = cmd_s.substr(0, io_index);
     string outer_cmd = cmd_s.substr(io_index);
@@ -209,6 +208,7 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
   else if (firstWord.compare("listdir") == 0)
   {
     return new ListDirCommand(cmd_line);
+
   }
   // else if (firstWord.compare("netinfo") == 0)
   // {
@@ -402,7 +402,7 @@ void JobsList::printJobsList()
   // removeFinishedJobs();
   for (const JobEntry &job : jobs)
   {
-    cout << "[" << job.getPid() << "] " << job.getCmdLine() << endl;
+    cout << "[" << job.getJobId() << "] " << job.getCmdLine() << endl;
   }
 }
 
@@ -412,7 +412,7 @@ void JobsList::killAllJobs()
   for (const JobEntry &job : jobs)
   {
     cout << job.getPid() << ": " << job.getCmdLine() << endl;
-    kill(job.getPid(), SIGKILL);
+    if (kill(job.getPid(), SIGKILL) == -1) perror("smash error: kill failed");
   }
 }
 
@@ -495,16 +495,16 @@ void KillCommand::execute()
     cerr << ("smash error: kill: invalid arguments") << endl;
     return;
   } // if theres no dash on -sugnum or signum is only '-'
-  auto ptr = args[1];
-  while (*++ptr)
+  auto ptr = ++args[1];
+  while (*ptr)
   {
     if (!isdigit(*ptr))
     {
       cerr << ("smash error: kill: invalid arguments") << endl;
       return;
     } // if signum is not digit
-    else
-      ++ptr;
+    
+    ++ptr;
   }
   ptr = args[2];
   while (*ptr)
@@ -553,6 +553,7 @@ void QuitCommand::execute()
   {
     cout << "smash: sending SIGKILL signal to " << jobs->length() << " jobs:" << endl;
     jobs->killAllJobs();
+    exit(0);
   }
 }
 
@@ -567,7 +568,8 @@ void ForegroundCommand::execute()
   JobsList::JobEntry *job = nullptr;
   if (args_len == 1) // fg max job
   {
-    if (jobs->getLastJob() == nullptr)
+    job = jobs->getLastJob();
+    if (job == nullptr)
     {
       cerr << ("smash error: fg: jobs list is empty") << endl;
       for (int i = 0; i < args_len; i++)
@@ -577,7 +579,22 @@ void ForegroundCommand::execute()
       delete[] args;
       return;
     }
-    job = jobs->getLastJob();
+    pid_t pid = job->getPid(); // save proccess id
+    string cmd = job->getCmdLine();
+    cout << cmd << " " << pid << endl;
+    jobs->removeJobById(job->getJobId());
+    SmallShell::getInstance().setFgPid(pid); // for signal handling
+    if (waitpid(pid, nullptr, WUNTRACED) == -1) // wait till process is finished
+    {
+      perror("smash error: waitpid failed");
+    }
+    SmallShell::getInstance().setFgPid(-1); // reset fg process
+    for (int i = 0; i < args_len; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+
   }
   else if (args_len == 2)
   {
@@ -628,19 +645,9 @@ void ForegroundCommand::execute()
       delete[] args;
       return;
     }
-    else
-    {
-      cerr << ("smash error: fg: too many arguments") << endl;
-      for (int i = 0; i < args_len; i++)
-      {
-        free(args[i]);
-      }
-      delete[] args;
-      return;
-    }
     pid_t pid = job->getPid(); // save proccess id
     string cmd = job->getCmdLine();
-    cout << cmd << " : " << pid << endl;
+    cout << cmd << " " << pid << endl;
     jobs->removeJobById(job->getJobId());
 
     SmallShell::getInstance().setFgPid(pid); // for signal handling
@@ -655,6 +662,15 @@ void ForegroundCommand::execute()
       free(args[i]);
     }
     delete[] args;
+  }
+  else{
+    cerr << ("smash error: fg: too many arguments") << endl;
+    for (int i = 0; i < args_len; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+    return;
   }
 }
   ExternalCommand::ExternalCommand(const char *cmd_line) : Command(cmd_line)
@@ -886,6 +902,7 @@ void ForegroundCommand::execute()
         pos += entry->d_reclen;
       }
     }
+    if (nread == -1)
 
     close(fd);
 

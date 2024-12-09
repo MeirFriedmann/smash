@@ -331,7 +331,7 @@ class ListDirCommand : public SpecialCommand
 {
 
 public:
-    ListDirCommand(const char *cmd_line);
+    ListDirCommand(const char *cmd_line): SpecialCommand(cmd_line){};
     virtual ~ListDirCommand() = default;
     void execute() override;
 private:

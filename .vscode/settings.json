@@ -1,9 +1,11 @@
 {
     "files.associations": {
+        "*.lex": "lex",
         "*.tcc": "cpp",
         "iostream": "cpp",
         "deque": "cpp",
         "string": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "new": "cpp"
     }
 }
