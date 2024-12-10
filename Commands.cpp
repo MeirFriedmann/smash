@@ -242,10 +242,13 @@ void SmallShell::executeCommand(const char *cmd_line)
       perror("smash error: fork failed");
       return;
     }
-    if (pid == 0)
+    if (pid == 0) //Child process code
     {
       if (setpgrp() == -1)
-        perror("smash error: setpgrp failed"); // needed?
+      {
+        perror("smash error: setpgrp failed"); // if processes in the same group CtrlC will kill smash
+        exit(1);
+      }
       cmd->execute();                          // son never returns...
     }
     else if (pid > 0)
@@ -253,8 +256,11 @@ void SmallShell::executeCommand(const char *cmd_line)
       if (!_isBackgroundCommand(cmd_line_copy))
       {
         int status;
-        if (waitpid(pid, &status, 0) == -1)
+        if (waitpid(pid, &status, 0) == -1) //wait till finished
+        {
           perror("smash error: waitpid failed"); // waitpid(pid, &status, 0);
+        }
+        setFgPid(-1); // reset tracking
       }
       else
       {
@@ -267,6 +273,7 @@ void SmallShell::executeCommand(const char *cmd_line)
     cmd->execute();
   }
   delete cmd;
+  free(cmd_line_copy);
 }
 
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
@@ -768,11 +775,6 @@ void AliasCommand::execute()
     cerr << "smash error: alias: " << alias_name << " already exists or is a reserved command " << endl;
     return;
   }
-  if (alias_cmd_line.find(alias_name) != std::string::npos)
-{
-    cerr << "smash error: alias: recursive alias definition "<< endl;
-    return;
-}
   SmallShell::getInstance().setAlias(alias_name, alias_cmd_line);
 }
 

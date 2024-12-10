@@ -20,26 +20,11 @@ protected:
 
 public:
     Command(const char *cmd_line);
-
     virtual ~Command() = default;
-
     virtual void execute() = 0;
-
-    pid_t getPid() const
-    {
-        return prcs_id;
-    } // not modifing class members
-    const char *getCmdLine() const
-    {
-        return cmd_line;
-    }
-    bool isBackground() const
-    {
-        return is_background;
-    }
-
-    // virtual void prepare();
-    // virtual void cleanup();
+    pid_t getPid() const { return prcs_id; } // not modifing class members
+    const char *getCmdLine() const { return cmd_line; }
+    bool isBackground() const { return is_background; }
 };
 
 class JobsList
@@ -47,7 +32,7 @@ class JobsList
 public:
     class JobEntry
     {
-        // TODO: Add your data members
+
         int job_id; // unique id
         pid_t prcs_id;
         std::string cmd_line;
@@ -55,18 +40,9 @@ public:
     public:
         JobEntry(int job_id, pid_t pid, const string &cmd);
         ~JobEntry() = default;
-        pid_t getPid() const
-        {
-            return prcs_id;
-        }
-        int getJobId() const
-        {
-            return job_id;
-        }
-        string getCmdLine() const
-        {
-            return cmd_line;
-        }
+        pid_t getPid() const { return prcs_id; }
+        int getJobId() const { return job_id; }
+        string getCmdLine() const { return cmd_line; }
     };
 
     // TODO: Add your data members
@@ -341,7 +317,7 @@ private:
     void printDirectoryContents(const string &path, int depth);
 };
 
-class NetInfo : public Command
+class NetInfo : public SpecialCommand 
 {
     // TODO: Add your data members
 public:
