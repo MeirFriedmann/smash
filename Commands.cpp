@@ -300,7 +300,7 @@ void ChangePromptCommand::execute()
   }
   else
   {
-    SmallShell::getInstance().setPrompt(args[1]); // doesnt work if len > 2, dont know why
+    SmallShell::getInstance().setPrompt(args[1]); 
   }
   for (int j = 0; j < args_len; j++)
   {
