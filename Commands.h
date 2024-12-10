@@ -1,10 +1,15 @@
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
 #include <fcntl.h>
-
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
 #include <vector>
 #include <map>
 #include <string>
+#include <sstream>
 using std::string;
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -317,17 +322,16 @@ private:
     void printDirectoryContents(const string &path, int depth);
 };
 
-class NetInfo : public SpecialCommand 
+class NetInfoCommand : public SpecialCommand 
 {
-    // TODO: Add your data members
+private:
+    std::vector<std::string> getDnsServers();
+    string getDefaultGateway();
+    
 public:
-    NetInfo(const char *cmd_line);
+    NetInfoCommand(const char* cmd_line) : SpecialCommand(cmd_line) {}
 
-    virtual ~NetInfo()
-    {
-    }
-
-    void execute() override;
+    void execute() override ;
 };
 
 class AliasCommand : public BuiltInCommand

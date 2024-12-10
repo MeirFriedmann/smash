@@ -169,9 +169,6 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
   }
   else if (firstWord.compare("chprompt") == 0)
   {
-    // pass cmd_line without first word
-    string new_prompt = cmd_s.substr(cmd_s.find_first_of(" \n") + 1);
-    // convert new
     return new ChangePromptCommand(cmd_line, getInstance()); //*this vs getinstance
   }
   else if (firstWord.compare("showpid") == 0)
@@ -214,10 +211,10 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
   {
     return new ListDirCommand(cmd_line);
   }
-  // else if (firstWord.compare("netinfo") == 0)
-  // {
-  //   return new NetInfoCommand(cmd_line);
-  // }
+  else if (firstWord.compare("netinfo") == 0)
+  {
+    return new NetInfoCommand(cmd_line);
+  }
   else
   {
     return new ExternalCommand(cmd_line);
@@ -242,21 +239,21 @@ void SmallShell::executeCommand(const char *cmd_line)
       perror("smash error: fork failed");
       return;
     }
-    if (pid == 0) //Child process code
+    if (pid == 0) // Child process code
     {
       if (setpgrp() == -1)
       {
         perror("smash error: setpgrp failed"); // if processes in the same group CtrlC will kill smash
         exit(1);
       }
-      cmd->execute();                          // son never returns...
+      cmd->execute(); // son never returns...
     }
     else if (pid > 0)
     {
       if (!_isBackgroundCommand(cmd_line_copy))
       {
         int status;
-        if (waitpid(pid, &status, 0) == -1) //wait till finished
+        if (waitpid(pid, &status, 0) == -1) // wait till finished
         {
           perror("smash error: waitpid failed"); // waitpid(pid, &status, 0);
         }
@@ -301,13 +298,13 @@ void ChangePromptCommand::execute()
   {
     SmallShell::getInstance().setPrompt("smash");
   }
-  else if (args_len == 2)
+  else
   {
-    SmallShell::getInstance().setPrompt(args[1]);
+    SmallShell::getInstance().setPrompt(args[1]); // doesnt work if len > 2, dont know why
   }
-  for (int i = 0; i < args_len; i++)
+  for (int j = 0; j < args_len; j++)
   {
-    free(args[i]);
+    free(args[j]);
   }
   delete[] args;
 }
@@ -1110,4 +1107,180 @@ void WhoAmICommand::execute()
   }
   if (close(fd) == -1)
     perror("smash error: close failed");
+}
+std::vector<std::string> NetInfoCommand::getDnsServers()
+{
+  vector<std::string> dns_servers;
+  char buffer[4096];
+  int fd = open("/etc/resolv.conf", O_RDONLY);
+  if (fd == -1)
+  {
+    perror("smash error: open failed");
+    return dns_servers;
+  }
+  string content;
+  ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
+  while (bytes_read > 0)
+  {
+    content.append(buffer, bytes_read);
+    bytes_read = read(fd, buffer, sizeof(buffer));
+  }
+  if (bytes_read == -1)
+  {
+    perror("smash error: read failed");
+    close(fd);
+    return dns_servers;
+  }
+  istringstream stream(content);
+  string line;
+  while (getline(stream, line))
+  {
+    if (line.substr(0, 10) == "nameserver")
+    {
+      dns_servers.push_back(line.substr(11));
+    }
+  }
+  close(fd);
+  return dns_servers;
+}
+
+string NetInfoCommand::getDefaultGateway()
+{
+  char buffer[4096];
+  int fd = open("/proc/net/route", O_RDONLY);
+  if (fd == -1)
+  {
+    perror("smash error: open failed");
+    return "";
+  }
+  string content;
+  ssize_t bytes_read = read(fd, buffer, sizeof(buffer));
+  while (bytes_read > 0)
+  {
+    content.append(buffer, bytes_read);
+    bytes_read = read(fd, buffer, sizeof(buffer));
+  }
+  if (bytes_read == -1)
+  {
+    perror("smash error: read failed");
+    close(fd);
+    return "";
+  }
+  istringstream stream(content);
+  string line;
+  getline(stream, line); // skip header
+  while (getline(stream, line))
+  {
+    istringstream iss(line);
+    string iface, dest, gateway;
+    iss >> iface >> dest >> gateway;
+    if (dest == "00000000")
+    {
+      unsigned int addr;
+      sscanf(gateway.c_str(), "%x", &addr);
+      struct in_addr ip_addr;
+      ip_addr.s_addr = addr;
+      close(fd);
+      return inet_ntoa(ip_addr);
+    }
+  }
+  close(fd);
+  return "";
+}
+
+void NetInfoCommand::execute()
+{
+  // Parse interface name from command
+  char **args = new char *[COMMAND_MAX_ARGS];
+  int args_count = _parseCommandLine(cmd_line, args);
+
+  if (args_count < 2)
+  {
+    cerr << "smash error: netinfo: interface not specified" << endl;
+    for (int j = 0; j < args_count; j++)
+    {
+      free(args[j]);
+    }
+    delete[] args;
+    return;
+  }
+
+  const char *interface = args[1];
+
+  // Create socket for interface queries
+  int sock = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sock == -1)
+  {
+    perror("smash error: socket failed");
+    for (int i = 0; i < args_count; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+    return;
+  }
+
+  // Get interface information
+  struct ifreq ifr;
+  memset(&ifr, 0, sizeof(ifr));
+  strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+
+  // Check if interface exists
+  if (ioctl(sock, SIOCGIFADDR, &ifr) < 0)
+  {
+    cerr << "smash error: netinfo: interface " << interface << " does not exist" << endl;
+    close(sock);
+    for (int i = 0; i < args_count; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+    return;
+  }
+
+  // Get IP address
+  struct sockaddr_in *ipaddr = (struct sockaddr_in *)&ifr.ifr_addr;
+  string ip = inet_ntoa(ipaddr->sin_addr);
+
+  // Get subnet mask
+  if (ioctl(sock, SIOCGIFNETMASK, &ifr) < 0)
+  {
+    perror("smash error: ioctl failed");
+    close(sock);
+    for (int i = 0; i < args_count; i++)
+    {
+      free(args[i]);
+    }
+    delete[] args;
+    return;
+  }
+  string netmask = inet_ntoa(((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr);
+
+  // Get default gateway and DNS servers
+  string gateway = getDefaultGateway();
+  vector<std::string> dns_servers = getDnsServers();
+
+  // Print network information
+  cout << "IP Address: " << ip << endl;
+  cout << "Subnet Mask: " << netmask << endl;
+  cout << "Default Gateway: " << gateway << endl;
+
+  cout << "DNS Servers: ";
+  if (!dns_servers.empty())
+  {
+    cout << dns_servers[0];
+    for (size_t i = 1; i < dns_servers.size(); i++)
+    {
+      cout << ", " << dns_servers[i];
+    }
+  }
+  cout << endl;
+
+  // Cleanup
+  close(sock);
+  for (int i = 0; i < args_count; i++)
+  {
+    free(args[i]);
+  }
+  delete[] args;
 }
