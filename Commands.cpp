@@ -144,7 +144,7 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
       }
     }
   }
-  regex pattern(firstWord + "(.*?) (>>|>) (.*)");
+
   size_t append_pos = cmd_s.find(">>");
   size_t redirect_pos = cmd_s.find(">");
   if (append_pos != string::npos || (redirect_pos != string::npos && cmd_s[redirect_pos + 1] != '>'))
@@ -1095,46 +1095,80 @@ void ListDirCommand::execute()
     }
   }
 }
-void RedirectionCommand::execute() {
-    // Save stdout
-    int stdout_backup = dup(STDOUT_FILENO);
-    if (stdout_backup == -1) {
-        perror("smash error: dup failed");
-        return;
+RedirectionCommand::RedirectionCommand(const char *cmd_line) : SpecialCommand(cmd_line)
+{
+  // Find position and type of redirection
+  string cmd_str(cmd_line);
+  const size_t append_pos = cmd_str.find(">>");
+  const size_t redirect_pos = cmd_str.find(">");
+
+  // Determine redirection type and position in one step
+  const size_t pos = (append_pos != string::npos) ? append_pos : redirect_pos;
+  if (pos != string::npos)
+  {
+    type = (append_pos != string::npos) ? ">>" : ">";
+
+    // Extract filename - using string_view for better performance
+    size_t start_pos = pos + type.length();
+    while (start_pos < cmd_str.length() && cmd_str[start_pos] == ' ')
+    {
+      ++start_pos;
     }
+    filename = cmd_str.substr(start_pos);
 
-    // Parse the redirection operator and filename
-    string cmd_str(cmd_line);
-    bool is_append = (cmd_str.find(">>") != string::npos);
-    
-    // Open output file with appropriate flags
-    int flags = O_WRONLY | O_CREAT | (is_append ? O_APPEND : O_TRUNC);
-    int output_fd = open(filename.c_str(), flags, 0644);
-    if (output_fd == -1) {
-        perror("smash error: open failed");
-        close(stdout_backup);
-        return;
+    // Extract command to execute
+    cmd_to_exec = cmd_str.substr(0, pos);
+    while (!cmd_to_exec.empty() && cmd_to_exec.back() == ' ')
+    {
+      cmd_to_exec.pop_back();
     }
+  }
+}
+void RedirectionCommand::execute()
+{
+  // Save stdout
+  int stdout_backup = dup(STDOUT_FILENO);
+  if (stdout_backup == -1)
+  {
+    perror("smash error: dup failed");
+    return;
+  }
 
-    // Redirect stdout to file
-    if (dup2(output_fd, STDOUT_FILENO) == -1) {
-        perror("smash error: dup2 failed");
-        close(output_fd);
-        close(stdout_backup);
-        return;
-    }
+  // Parse the redirection operator and filename
+  string cmd_str(cmd_line);
+  bool is_append = (cmd_str.find(">>") != string::npos);
 
-    // Execute the command
-    SmallShell::getInstance().executeCommand(cmd_to_exec.c_str());
+  // Open output file with appropriate flags
+  int flags = O_WRONLY | O_CREAT | (is_append ? O_APPEND : O_TRUNC);
+  int output_fd = open(filename.c_str(), flags, 0644);
+  if (output_fd == -1)
+  {
+    perror("smash error: open failed");
+    close(stdout_backup);
+    return;
+  }
 
-    // Restore stdout
-    if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
-        perror("smash error: dup2 failed");
-    }
-
-    // Cleanup
+  // Redirect stdout to file
+  if (dup2(output_fd, STDOUT_FILENO) == -1)
+  {
+    perror("smash error: dup2 failed");
     close(output_fd);
     close(stdout_backup);
+    return;
+  }
+
+  // Execute the command
+  SmallShell::getInstance().executeCommand(cmd_to_exec.c_str());
+
+  // Restore stdout
+  if (dup2(stdout_backup, STDOUT_FILENO) == -1)
+  {
+    perror("smash error: dup2 failed");
+  }
+
+  // Cleanup
+  close(output_fd);
+  close(stdout_backup);
 }
 
 void WhoAmICommand::execute()

@@ -205,6 +205,7 @@ private:
     string right_cmd;
     bool is_stderr;
     void parsePipeCommand();
+
 public:
     PipeCommand(const char *cmd_line);
 
@@ -324,16 +325,16 @@ private:
     void printDirectoryContents(const string &path, int depth);
 };
 
-class NetInfoCommand : public SpecialCommand 
+class NetInfoCommand : public SpecialCommand
 {
 private:
     std::vector<std::string> getDnsServers();
     string getDefaultGateway();
-    
-public:
-    NetInfoCommand(const char* cmd_line) : SpecialCommand(cmd_line) {}
 
-    void execute() override ;
+public:
+    NetInfoCommand(const char *cmd_line) : SpecialCommand(cmd_line) {}
+
+    void execute() override;
 };
 
 class AliasCommand : public BuiltInCommand
@@ -363,14 +364,14 @@ public:
 class RedirectionCommand : public SpecialCommand
 {
 private:
-    string cmd_to_exec;     // The command part (before > or >>)
-    string filename;        // The output file
-    bool is_append;        // true for >>, false for >
+    string cmd_to_exec; // The command part (before > or >>)
+    string filename;    // The output file
+    string type;        // Stores the redirection operator (">" or ">>")
 
-    static void _parseCommand(const string& cmd_line, string& cmd, string& file, bool& append);
+    static void _parseCommand(const string &cmd_line, string &cmd, string &file, bool &append);
 
 public:
-    explicit RedirectionCommand(const char* cmd_line);
+    RedirectionCommand(const char *cmd_line);
     virtual ~RedirectionCommand() = default;
     void execute() override;
 };
