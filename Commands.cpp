@@ -400,14 +400,14 @@ JobsList::JobsList() : jobs(), max_job_id(0)
 
 void JobsList::addJob(Command *cmd, pid_t pid)
 {
-  // removeFinishedJobs();
+
   max_job_id++;
   jobs.push_back(JobEntry(max_job_id, pid, cmd->getCmdLine()));
 }
 
 void JobsList::printJobsList()
 {
-  // removeFinishedJobs();
+
   for (const JobEntry &job : jobs)
   {
     cout << "[" << job.getJobId() << "] " << job.getCmdLine() << endl;
@@ -441,6 +441,15 @@ void JobsList::removeFinishedJobs()
     if (pid > 0)
     {
       it = jobs.erase(it);
+      if (it->getJobId() == max_job_id)
+      {
+        max_job_id = 0;
+        for (const JobEntry &job : jobs)
+        {
+          max_job_id = std::max(max_job_id, job.getJobId());
+        }
+      }
+      
     }
     else
     {
@@ -462,10 +471,17 @@ JobsList::JobEntry *JobsList::getJobById(int jobId)
 
 void JobsList::removeJobById(int jobId)
 {
-  jobs.erase(std::remove_if(jobs.begin(), jobs.end(), // added include algorithms
-                            [jobId](const JobEntry &job)
-                            { return job.getJobId() == jobId; }),
-             jobs.end());
+  auto it = std::remove_if(jobs.begin(), jobs.end(),
+                           [jobId](const JobEntry &job)
+                           { return job.getJobId() == jobId; });
+
+  jobs.erase(it, jobs.end());
+
+  max_job_id = 0;
+  for (const JobEntry &job : jobs)
+  {
+    max_job_id = std::max(max_job_id, job.getJobId());
+  }
 }
 JobsList::JobEntry *JobsList::getLastJob() //(int* lastJobId)
 {
@@ -488,6 +504,8 @@ JobsCommand::JobsCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(
 
 void JobsCommand::execute()
 {
+  jobs->removeFinishedJobs();
+
   jobs->printJobsList();
 }
 
@@ -533,17 +551,26 @@ void KillCommand::execute()
   } // jobid starts with 0 or signum has 0 and then digit
   int signum = atoi(args[1]);
   int job_id = atoi(args[2]);
+  JobsList::JobEntry *job = jobs->getJobById(job_id);
   if (jobs->getJobById(job_id) == nullptr)
   {
     cerr << "smash error: kill: job-id " << (job_id) << " does not exist" << endl;
   }
-  else if (kill(jobs->getJobById(job_id)->getPid(), signum) == -1)
-  {
-    perror(" smash error: kill failed");
-    return;
-  }
   else
-    cout << "signal number " << signum << " was sent to pid " << jobs->getJobById(job_id)->getPid() << endl;
+  {
+    int kill_result = kill(job->getPid(), signum);
+    if (kill_result == -1)
+    {
+      perror("smash error: kill failed");
+      return;
+    }
+    else
+    {
+      // remove job from jobslist
+      jobs->removeJobById(job_id);
+      cout << "signal number " << signum << " was sent to pid " << job->getPid() << endl;
+    }
+  }
 }
 
 QuitCommand::QuitCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs)
