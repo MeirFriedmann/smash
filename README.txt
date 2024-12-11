@@ -1,4 +1,4 @@
-The given skeleton includes the following files:
+The given skeleton includes the following files::
 - Commands.h/Commands.cpp: The supported commands of smash, each command is represented by a class that inherits from either BuiltInCommand or ExternalCommand. Each command that you add should implement execute, which is a virtual method, that executes the command.
 - signals.h/signals.cpp: Declares and implements requires signal handler: SIGINT handler to handle Ctr+C If you are going to implement the bonus part then you have to implement additional handler for SIG_ALRM.
 - smash.cpp: Contains the smash main, which runs an infinite loop that receives the next typed command and sends it to SmallShell::executeCommand to handle it. Please note that if you are going to implement the bonus part, then you have to define a handler for SIG_ALRM in the main (in this file).
