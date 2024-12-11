@@ -700,7 +700,7 @@ void ForegroundCommand::execute()
   }
   else
   {
-    cerr << ("smash error: fg: too many arguments") << endl;
+    cerr << ("smash error: fg: invalid arguments") << endl;
     for (int i = 0; i < args_len; i++)
     {
       free(args[i]);
