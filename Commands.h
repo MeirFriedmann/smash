@@ -198,15 +198,17 @@ public:
     void execute() override;
 };
 
-class PipeCommand : public Command
+class PipeCommand : public SpecialCommand
 {
-    // TODO: Add your data members
+private:
+    string left_cmd;
+    string right_cmd;
+    bool is_stderr;
+    void parsePipeCommand();
 public:
     PipeCommand(const char *cmd_line);
 
-    virtual ~PipeCommand()
-    {
-    }
+    virtual ~PipeCommand() = default;
 
     void execute() override;
 };
@@ -361,13 +363,15 @@ public:
 class RedirectionCommand : public SpecialCommand
 {
 private:
-    const char *inner_cmd_line;
+    string cmd_to_exec;     // The command part (before > or >>)
+    string filename;        // The output file
+    bool is_append;        // true for >>, false for >
+
+    static void _parseCommand(const string& cmd_line, string& cmd, string& file, bool& append);
 
 public:
-    RedirectionCommand(const char *cmd_line, const char *inner_cmd_line) : SpecialCommand(cmd_line), inner_cmd_line(inner_cmd_line) {}
-
+    explicit RedirectionCommand(const char* cmd_line);
     virtual ~RedirectionCommand() = default;
-
     void execute() override;
 };
 

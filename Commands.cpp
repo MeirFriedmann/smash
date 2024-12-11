@@ -145,17 +145,11 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
     }
   }
   regex pattern(firstWord + "(.*?) (>>|>) (.*)");
-  if (regex_match(cmd_s, pattern))
+  size_t append_pos = cmd_s.find(">>");
+  size_t redirect_pos = cmd_s.find(">");
+  if (append_pos != string::npos || (redirect_pos != string::npos && cmd_s[redirect_pos + 1] != '>'))
   {
-    cout << "found >> or >" << endl;
-    size_t io_index = cmd_s.find_last_of(" ") - 2 == ' ' ? cmd_s.find_last_of(" ") - 1 : cmd_s.find_last_of(" ") - 2;
-    string inner_cmd = cmd_s.substr(0, io_index);
-    string outer_cmd = cmd_s.substr(io_index);
-    char *outer_cmd_copy = new char[outer_cmd.length() + 1];
-    char *inner_cmd_copy = new char[inner_cmd.length() + 1];
-    strcpy(outer_cmd_copy, outer_cmd.c_str());
-    strcpy(inner_cmd_copy, inner_cmd.c_str());
-    return new RedirectionCommand(outer_cmd_copy, inner_cmd_copy);
+    return new RedirectionCommand(cmd_line);
   }
   // if command in alias -> firstWord = alias[firstWord]
   if (getInstance().getAlias(firstWord))
@@ -214,6 +208,10 @@ Command *SmallShell::CreateCommand(char *cmd_line_arg) // i deleted const
   else if (firstWord.compare("netinfo") == 0)
   {
     return new NetInfoCommand(cmd_line);
+  }
+  else if (cmd_s.find("|") != string::npos || cmd_s.find("|&") != string::npos)
+  {
+    return new PipeCommand(cmd_line);
   }
   else
   {
@@ -300,7 +298,7 @@ void ChangePromptCommand::execute()
   }
   else
   {
-    SmallShell::getInstance().setPrompt(args[1]); 
+    SmallShell::getInstance().setPrompt(args[1]);
   }
   for (int j = 0; j < args_len; j++)
   {
@@ -449,7 +447,6 @@ void JobsList::removeFinishedJobs()
           max_job_id = std::max(max_job_id, job.getJobId());
         }
       }
-      
     }
     else
     {
@@ -761,13 +758,117 @@ void ExternalCommand::execute()
   free(cmd_line_copy);
   exit(1);
 }
-
-PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line)
+void PipeCommand::parsePipeCommand()
 {
+  string cmd_str(cmd_line);
+  is_stderr = cmd_str.find("|&") != string::npos; // is stderr
+  string delimiter = is_stderr ? "|&" : "|";
+
+  size_t delimiter_position = cmd_str.find(delimiter);
+  right_cmd = cmd_str.substr(delimiter_position + delimiter.length());
+  left_cmd = cmd_str.substr(0, delimiter_position);
+}
+PipeCommand::PipeCommand(const char *cmd_line) : SpecialCommand(cmd_line)
+{
+  parsePipeCommand();
 }
 
 void PipeCommand::execute()
 {
+  int pipe_fd[2];
+  if (pipe(pipe_fd) == -1)
+  {
+    perror("smash error: pipe failed");
+    return;
+  }
+
+  pid_t left_pid = fork();
+  if (left_pid == -1)
+  {
+    perror("smash error: fork failed");
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+    return;
+  }
+  if (left_pid == 0)
+  {
+    if (setpgrp() == -1)
+    {
+      perror("smash error: setpgrp failed");
+      exit(1);
+    }
+    if (close(pipe_fd[0]) == -1)
+    {
+      perror("smash error: close failed");
+      exit(1);
+    }
+    if (dup2(pipe_fd[1], STDOUT_FILENO) == -1)
+    {
+      perror("smash error: dup2 failed");
+      exit(1);
+    }
+    if (is_stderr && dup2(pipe_fd[1], STDERR_FILENO) == -1)
+    {
+      perror("smash error: dup2 failed");
+      exit(1);
+    }
+    if (close(pipe_fd[1]) == -1)
+    {
+      perror("smash error: close failed");
+      exit(1);
+    }
+
+    SmallShell::getInstance().executeCommand(left_cmd.c_str());
+    exit(0);
+  }
+
+  pid_t right_pid = fork();
+  if (right_pid == -1)
+  {
+    perror("smash error: fork failed");
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+    return;
+  }
+  if (right_pid == 0)
+  {
+    if (setpgrp() == -1)
+    {
+      perror("smash error: setpgrp failed");
+      exit(1);
+    }
+    if (close(pipe_fd[1]) == -1)
+    {
+      perror("smash error: close failed");
+      exit(1);
+    }
+    if (dup2(pipe_fd[0], STDIN_FILENO) == -1)
+    {
+      perror("smash error: dup2 failed");
+      exit(1);
+    }
+    if (close(pipe_fd[0]) == -1)
+    {
+      perror("smash error: close failed");
+      exit(1);
+    }
+    SmallShell::getInstance().executeCommand(right_cmd.c_str());
+    exit(0);
+  }
+  if (close(pipe_fd[0]) == -1 || close(pipe_fd[1]) == -1)
+  {
+    perror("smash error: close failed");
+    return;
+  }
+
+  if (waitpid(left_pid, nullptr, WUNTRACED) == -1)
+  {
+    perror("smash error: waitpid failed");
+  }
+  if (waitpid(right_pid, nullptr, WUNTRACED) == -1)
+  {
+    perror("smash error: waitpid failed");
+  }
 }
 
 AliasCommand::AliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line)
@@ -994,93 +1095,46 @@ void ListDirCommand::execute()
     }
   }
 }
-void RedirectionCommand::execute()
-{
-  char **args = new char *[COMMAND_MAX_ARGS]; // cmd_line is > filename or >> filename
-  _parseCommandLine(cmd_line, args);
-  const char *to_file_path = strdup(args[1]); // Remember to free() this later
-  pid_t pid = getpid();
-  if (pid == -1)
-  {
-    perror("smash error: getpid failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
+void RedirectionCommand::execute() {
+    // Save stdout
+    int stdout_backup = dup(STDOUT_FILENO);
+    if (stdout_backup == -1) {
+        perror("smash error: dup failed");
+        return;
     }
-    delete[] args;
-    return;
-  }
-  int to_file_fd;
-  if (strcmp(args[0], ">") == 0)
-  {
-    to_file_fd = open(to_file_path, O_WRONLY | O_TRUNC | O_CREAT, S_IWUSR);
-  }
-  else
-  {
-    to_file_fd = open(to_file_path, O_WRONLY | O_APPEND | O_CREAT, S_IWUSR);
-  }
-  if (to_file_fd == -1)
-  {
-    perror("smash error: open failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
+
+    // Parse the redirection operator and filename
+    string cmd_str(cmd_line);
+    bool is_append = (cmd_str.find(">>") != string::npos);
+    
+    // Open output file with appropriate flags
+    int flags = O_WRONLY | O_CREAT | (is_append ? O_APPEND : O_TRUNC);
+    int output_fd = open(filename.c_str(), flags, 0644);
+    if (output_fd == -1) {
+        perror("smash error: open failed");
+        close(stdout_backup);
+        return;
     }
-    delete[] args;
-    return;
-  }
-  int prev_from_fd = dup(1);
-  if (prev_from_fd == -1)
-  {
-    perror("smash error: dup failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
+
+    // Redirect stdout to file
+    if (dup2(output_fd, STDOUT_FILENO) == -1) {
+        perror("smash error: dup2 failed");
+        close(output_fd);
+        close(stdout_backup);
+        return;
     }
-    delete[] args;
-    return;
-  }
-  if (dup2(to_file_fd, 1) == -1)
-  {
-    perror("smash error: dup2 failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
+
+    // Execute the command
+    SmallShell::getInstance().executeCommand(cmd_to_exec.c_str());
+
+    // Restore stdout
+    if (dup2(stdout_backup, STDOUT_FILENO) == -1) {
+        perror("smash error: dup2 failed");
     }
-    delete[] args;
-    return;
-  }
-  SmallShell::getInstance().executeCommand(inner_cmd_line);
-  if (dup2(prev_from_fd, 1) == -1)
-  {
-    perror("smash error: dup2 failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
-    }
-    delete[] args;
-    return;
-  }
-  if (close(to_file_fd) == -1)
-  {
-    perror("smash error: close failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
-    }
-    delete[] args;
-    return;
-  } // at the end so file pointer is at place.
-  if (close(prev_from_fd) == -1)
-  {
-    perror("smash error: close failed");
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++)
-    {
-      free(args[i]);
-    }
-    delete[] args;
-    return;
-  }
+
+    // Cleanup
+    close(output_fd);
+    close(stdout_backup);
 }
 
 void WhoAmICommand::execute()
