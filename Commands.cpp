@@ -584,10 +584,19 @@ void QuitCommand::execute()
   }
   else if (strcmp(args[1], "kill") == 0)
   {
+    jobs->removeFinishedJobs();
     cout << "smash: sending SIGKILL signal to " << jobs->length() << " jobs:" << endl;
-    jobs->killAllJobs();
+    if (jobs->length() > 0)
+    {
+      jobs->killAllJobs();
+    }
     exit(0);
   }
+  for (int i = 0; i < args_len; i++)
+  {
+    free(args[i]);
+  }
+  delete[] args;
 }
 
 ForegroundCommand::ForegroundCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs)
@@ -1140,7 +1149,8 @@ void RedirectionCommand::execute()
 
   // Open output file with appropriate flags
   int flags = O_WRONLY | O_CREAT | (is_append ? O_APPEND : O_TRUNC);
-  int output_fd = open(filename.c_str(), flags, 0644);
+  mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH; // 0644 permissions
+  int output_fd = open(filename.c_str(), flags, mode);
   if (output_fd == -1)
   {
     perror("smash error: open failed");
