@@ -438,15 +438,15 @@ void JobsList::removeFinishedJobs()
     // if (WIFEXITED(status) || WIFSIGNALED(status)) doesnt work for some reason. always true even if running
     if (pid > 0)
     {
-      it = jobs.erase(it);
+        it = jobs.erase(it);
       if (it->getJobId() == max_job_id)
       {
         max_job_id = 0;
         for (const JobEntry &job : jobs)
         {
           max_job_id = std::max(max_job_id, job.getJobId());
-        }
       }
+    }
     }
     else
     {
@@ -564,7 +564,7 @@ void KillCommand::execute()
     else
     {
       // remove job from jobslist
-      jobs->removeJobById(job_id);
+      // jobs->removeJobById(job_id);
       cout << "signal number " << signum << " was sent to pid " << job->getPid() << endl;
     }
   }
@@ -585,9 +585,10 @@ void QuitCommand::execute()
   else if (strcmp(args[1], "kill") == 0)
   {
     jobs->removeFinishedJobs();
-    cout << "smash: sending SIGKILL signal to " << jobs->length() << " jobs:" << endl;
+    
     if (jobs->length() > 0)
     {
+      cout << "smash: sending SIGKILL signal to " << jobs->length() << " jobs:" << endl;
       jobs->killAllJobs();
     }
     exit(0);
@@ -727,7 +728,10 @@ void ExternalCommand::execute()
     perror("smash error: strdup failed");
     exit(1);
   }
-  _removeBackgroundSign(cmd_line_copy);
+  if (_isBackgroundCommand(cmd_line_copy))
+  {
+    _removeBackgroundSign(cmd_line_copy);
+  }
   char **args = new char *[COMMAND_MAX_ARGS];
   _parseCommandLine(cmd_line_copy, args);
 
@@ -767,6 +771,7 @@ void ExternalCommand::execute()
   free(cmd_line_copy);
   exit(1);
 }
+
 void PipeCommand::parsePipeCommand()
 {
   string cmd_str(cmd_line);
