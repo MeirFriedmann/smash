@@ -50,7 +50,6 @@ public:
         string getCmdLine() const { return cmd_line; }
     };
 
-    // TODO: Add your data members
 private:
     std::vector<JobEntry> jobs;
     int max_job_id;
@@ -83,7 +82,6 @@ public:
         return max_job_id;
     }
 
-    // TODO: Add extra methods or modify exisitng ones as needed
 };
 
 class SmallShell

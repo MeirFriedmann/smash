@@ -399,8 +399,15 @@ JobsList::JobsList() : jobs(), max_job_id(0)
 void JobsList::addJob(Command *cmd, pid_t pid)
 {
 
-  max_job_id++;
-  jobs.push_back(JobEntry(max_job_id, pid, cmd->getCmdLine()));
+  // Find the highest job ID and increment by 1
+  int new_id = 1;
+  for (const JobEntry &job : jobs)
+  {
+    new_id = std::max(new_id, job.getJobId() + 1);
+  }
+
+  jobs.push_back(JobEntry(new_id, pid, cmd->getCmdLine()));
+  max_job_id = new_id;
 }
 
 void JobsList::printJobsList()
@@ -419,13 +426,16 @@ void JobsList::killAllJobs()
   {
     cout << job.getPid() << ": " << job.getCmdLine() << endl;
     if (kill(job.getPid(), SIGKILL) == -1)
+    {
       perror("smash error: kill failed");
+    }
   }
 }
 
 void JobsList::removeFinishedJobs()
 {
   auto it = jobs.begin();
+  bool removed = false;
   while (it != jobs.end())
   {
     int status;
@@ -435,22 +445,24 @@ void JobsList::removeFinishedJobs()
       perror("smash error: waitpid failed");
       return;
     }
-    // if (WIFEXITED(status) || WIFSIGNALED(status)) doesnt work for some reason. always true even if running
-    if (pid > 0)
+    // Check if process actually terminated
+    if (pid > 0 && (WIFEXITED(status) || WIFSIGNALED(status)))
     {
-        it = jobs.erase(it);
-      if (it->getJobId() == max_job_id)
-      {
-        max_job_id = 0;
-        for (const JobEntry &job : jobs)
-        {
-          max_job_id = std::max(max_job_id, job.getJobId());
-      }
-    }
+      removed = true;
+      it = jobs.erase(it);
     }
     else
     {
       ++it;
+    }
+  }
+
+  if (removed)
+  {
+    max_job_id = 0;
+    for (const JobEntry &job : jobs)
+    {
+      max_job_id = std::max(max_job_id, job.getJobId());
     }
   }
 }
@@ -585,7 +597,7 @@ void QuitCommand::execute()
   else if (strcmp(args[1], "kill") == 0)
   {
     jobs->removeFinishedJobs();
-    
+
     if (jobs->length() > 0)
     {
       cout << "smash: sending SIGKILL signal to " << jobs->length() << " jobs:" << endl;
